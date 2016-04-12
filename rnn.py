@@ -48,7 +48,7 @@ class Predictor(ChainList):
 class ANN(object):
     """Artificial neural network class."""
 
-    def __init__(self, GPU, optimizer, predictor, lossfun, hook=None):
+    def __init__(self, GPU, optimizer, predictor = optimizers.Adam(), lossfun = F.mean_squared_error, hook=None):
 
         self.GPU = GPU
         self.log = {}
