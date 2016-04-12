@@ -195,55 +195,6 @@ class ANN(object):
 
         return Y
 
-    def simulate(self, x, simfun = lambda x: x, maxiter = 100, termfun = lambda y: False):
-        """
-        Simulate an ANN where the simulation function specifies how the new observation is generated
-        depending on the ANN output. Default: lambda function which feeds output to input (e.g. for language modeling)
-        The simulation stops when either maxiter is reached or when termfun(y) evaluates to True
-
-        x is a numpy.ndarray of shape (P,1)
-        P is the number of input variables denoting the initial state of the network
-        simfun is the simulation function which translates an output into a new input
-        maxiter is the maximum number of iterations
-        termfun is the termination function which depending on the output decides whether or not to terminate
-        """
-
-        self.regressor.predictor.reset_state()
-
-        x = Variable(x)
-
-        X = np.empty([maxiter, x.shape[0]])
-
-        step = 0
-        while step < maxiter:
-
-            if self.GPU:
-                x.to_gpu()
-
-            X[step, :] = x
-
-            y = self.regressor.predictor(x)
-
-            if self.GPU:
-                y.to_cpu()
-
-            if step == 0:
-                Y = np.empty([maxiter, y.data.shape[0]], 'float32')
-
-            Y[step, :] = y.data
-
-            if termfun(y.data):
-                break
-
-            x = simfun(y.data)
-
-            step += 1
-
-        X = X[0:np.min(step,maxiter),:]
-        Y = Y[0:np.min(step,maxiter),:]
-
-        return X, Y
-
     def load(self, prefix):
         self.log = np.load('{0}_log.npy'.format(prefix))[()]
 
