@@ -235,6 +235,6 @@ class ANN(object):
 
     def save(self, prefix):
         np.save('{0}_log'.format(prefix), self.log)
-        serializers.save_npz('{0}_ANN'.format(prefix), self.optimizer)
+        serializers.save_npz('{0}_optimizer'.format(prefix), self.optimizer)
         serializers.save_npz('{0}_regressor'.format(prefix), self.regressor)
 
