@@ -26,14 +26,30 @@ class Regressor(Chain):
         super(Regressor, self).__init__(predictor=predictor)
 
 class Predictor(ChainList):
-    """"Predictor class implements a neural network as given by a list of layers."""
+    """"
+    Predictor class implements a neural network as given by a list of layers.
 
-    def __call__(self, x):
+    Input:
+    x : input data
+    internal : Returns the internal activations as well (default: False)
 
-        for l in self:
-            x = l(x)
+    """
 
-        return x
+    def __call__(self, x, internal = False):
+
+        if internal:
+            activations = []
+            for l in self:
+                x = l(x)
+                activations.append(x)
+
+            return activations.pop(), activations
+
+        else:
+            for l in self:
+                x = l(x)
+
+            return x
 
     def __init__(self, *args):
         super(Predictor, self).__init__(*args)
@@ -162,7 +178,7 @@ class ANN(object):
             else:
                 callback(self, T, X, epochs, n)
 
-    def test(self, X):
+    def test(self, X, internal = False):
         """
         Test an artificial neural network
 
@@ -170,6 +186,9 @@ class ANN(object):
         N is the number of sequences (e.g. number of runs).
         L is the length of sequences (e.g. length of runs).
         P is the number of input variables.
+
+        internal : returns all the internal activations as well (default: False)
+
         """
 
         for iteration in xrange(X.shape[0]):
@@ -183,7 +202,11 @@ class ANN(object):
                 if self.GPU:
                     x.to_gpu()
 
-                y = self.regressor.predictor(x)
+                if internal:
+                    [y,activations] = self.regressor.predictor(x,True)
+                    print activations.shape
+                else:
+                    y = self.regressor.predictor(x)
 
                 if self.GPU:
                     y.to_cpu()
@@ -203,6 +226,6 @@ class ANN(object):
 
     def save(self, prefix):
         np.save('{0}_log'.format(prefix), self.log)
-        serializers.save_npz('{0}_optimizer'.format(prefix), self.optimizer)
+        serializers.save_npz('{0}_ANN'.format(prefix), self.optimizer)
         serializers.save_npz('{0}_regressor'.format(prefix), self.regressor)
 
