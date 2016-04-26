@@ -203,8 +203,17 @@ class ANN(object):
                     x.to_gpu()
 
                 if internal:
+
                     [y,activations] = self.regressor.predictor(x,True)
-                    print activations.shape
+
+                    if iteration == step == 0:
+                        ACT = []
+                        for i in xrange(len(activations)):
+                            ACT.append(np.empty((X.shape[0], X.shape[1], activations[i].data.shape[1]), 'float32'))
+
+                    for i in xrange(len(activations)):
+                        ACT[i][iteration: iteration + 1, step,:] = activations[i].data
+
                 else:
                     y = self.regressor.predictor(x)
 
@@ -216,7 +225,7 @@ class ANN(object):
 
                 Y[iteration: iteration + 1, step,:] = y.data
 
-        return Y
+        return Y, ACT
 
     def load(self, prefix):
         self.log = np.load('{0}_log.npy'.format(prefix))[()]
