@@ -191,6 +191,8 @@ class ANN(object):
 
         """
 
+        ACT = []
+
         for iteration in xrange(X.shape[0]):
 
             self.regressor.predictor.reset_state()
@@ -207,7 +209,6 @@ class ANN(object):
                     [y,activations] = self.regressor.predictor(x,True)
 
                     if iteration == step == 0:
-                        ACT = []
                         for i in xrange(len(activations)):
                             ACT.append(np.empty((X.shape[0], X.shape[1], activations[i].data.shape[1]), 'float32'))
 
