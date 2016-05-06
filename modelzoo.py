@@ -1,6 +1,7 @@
 from chainer import Chain
 import chainer.functions as F
 import chainer.links as L
+import numpy as np
 
 class MLP(Chain):
     """
@@ -10,7 +11,7 @@ class MLP(Chain):
     def __init__(self, ninput, nhidden, noutput):
         super(MLP, self).__init__(
             l1=L.Linear(ninput, nhidden),
-            l2=L.Linear(nhidden, noutput)
+            l2=L.Linear(nhidden, noutput, initialW=np.zeros((noutput, nhidden), dtype=np.float32))
         )
 
     def __call__(self, x):
