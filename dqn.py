@@ -31,7 +31,7 @@ class DQN(object):
         # number of input frames to consider
         self.nframes = kwargs.get('nframes',1)
 
-        # size of the replay buffer
+        # size of the replay buffer D
         self.nbuffer = kwargs.get('nbuffer',10**4)
 
         # number of experiences to replay (batch size)
@@ -59,7 +59,7 @@ class DQN(object):
         self.optimizer.setup(self.model)
 
         # initialize replay memory
-        self.memory = self.createBuffer(self.nbuffer)
+        self.D = self.createBuffer(self.nbuffer)
 
     def createBuffer(self,n):
         """
@@ -86,11 +86,11 @@ class DQN(object):
         B = self.createBuffer(buf_size)
 
         for i in xrange(buf_size):
-            B['obs'][i]  = np.asarray(self.memory['obs'][idx[i]], dtype=np.float32)
-            B['action'][i] = self.memory['action'][idx[i]]
-            B['reward'][i] = self.memory['reward'][idx[i]]
-            B['obs2'][i] = np.array(self.memory['obs2'][idx[i]], dtype=np.float32)
-            B['done'][i]   = self.memory['done'][idx[i]]
+            B['obs'][i]  = np.asarray(self.D['obs'][idx[i]], dtype=np.float32)
+            B['action'][i] = self.D['action'][idx[i]]
+            B['reward'][i] = self.D['reward'][idx[i]]
+            B['obs2'][i] = np.array(self.D['obs2'][idx[i]], dtype=np.float32)
+            B['done'][i]   = self.D['done'][idx[i]]
 
         if self.nframes > 1:
 
@@ -118,14 +118,14 @@ class DQN(object):
 
         idx = (time - 1) % self.nbuffer # time counter is relative to obs2
 
-        self.memory['action'][idx] = action
-        self.memory['reward'][idx] = reward
-        self.memory['done'][idx] = done
+        self.D['action'][idx] = action
+        self.D['reward'][idx] = reward
+        self.D['done'][idx] = done
 
         if self.nframes == 1:
 
-            self.memory['obs'][idx]  = obs
-            self.memory['obs2'][idx] = obs2
+            self.D['obs'][idx]  = obs
+            self.D['obs2'][idx] = obs2
 
         else:
 
@@ -135,8 +135,8 @@ class DQN(object):
 
             for frame in xrange(self.nframes):
 
-                self.memory['obs'][idx - frame, self.nframes - frame - 1] = obs
-                self.memory['obs2'][idx - frame, self.nframes - frame - 1] = obs2
+                self.D['obs'][idx - frame, self.nframes - frame - 1] = obs
+                self.D['obs2'][idx - frame, self.nframes - frame - 1] = obs2
 
     def experienceReplay(self, time):
         """
@@ -150,14 +150,15 @@ class DQN(object):
 
         """
 
-        if time < self.nbuffer:
-            idx = np.random.randint(0, time, (self.nreplay, 1))
-        else:
-            idx = np.random.randint(0, self.nbuffer, (self.nreplay, 1))
-
+        # Select random examples in the buffer
+        idx = np.random.randint(0, np.min([time, self.nbuffer]), (self.nreplay, 1))
         B = self.getBuffer(idx)
 
         if time >= self.nexplore: # learning phase
+
+            # Target model update
+            if (time >= self.nexplore) and (time % self.update_freq == 0):
+                self.target_model = copy.deepcopy(self.model)
 
 #                 s_replay = cuda.to_gpu(s_replay)
 #                 s_dash_replay = cuda.to_gpu(s_dash_replay)
@@ -174,9 +175,6 @@ class DQN(object):
 
             return float('nan') # self.forward(B['obs'], B['action'], B['reward'], B['obs2'], B['done']).data
 
-        # Target model update
-        if time >= self.nexplore and np.mod(time, self.update_freq) == 0:
-            self.target_model = copy.deepcopy(self.model)
 
     def forward(self, obs, action, reward, obs2, done):
         """
