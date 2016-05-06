@@ -46,15 +46,14 @@ class DQN(object):
         # update frequency of the target model
         self.update_freq = kwargs.get('update_freq',10**2)
 
-        # define model
+        # number of hidden units
         self.nhidden = kwargs.get('nhidden',10)
-        self.model = kwargs.get('model',modelzoo.MLP)
-        self.model = self.model(self.ninput*self.nframes, self.nhidden, self.noutput)
 
-        # target model is copy of defined model
+        self.model = kwargs.get('model',modelzoo.MLP)
+        self.model = self.model(self.ninput, self.nhidden, self.noutput)
+
         self.target_model = copy.deepcopy(self.model)
 
-        # define SGD optimizer
         self.optimizer = optimizers.RMSpropGraves(lr=0.00025, alpha=0.95, momentum=0.99, eps=0.0001)
         self.optimizer.setup(self.model)
 
@@ -91,14 +90,6 @@ class DQN(object):
             B['reward'][i] = self.memory['reward'][idx[i]]
             B['obs2'][i] = np.array(self.memory['obs2'][idx[i]], dtype=np.float32)
             B['done'][i]   = self.memory['done'][idx[i]]
-
-        if self.nframes > 1:
-
-            # Used to handle multiple frames (flatten)
-            sz = [buf_size, self.nframes * self.ninput]
-
-            B['obs'] = B['obs'].reshape(sz)
-            B['obs2'] = B['obs2'].reshape(sz)
 
         return B
 
@@ -157,26 +148,36 @@ class DQN(object):
 
         B = self.getBuffer(idx)
 
-        if time >= self.nexplore: # learning phase
-
 #                 s_replay = cuda.to_gpu(s_replay)
 #                 s_dash_replay = cuda.to_gpu(s_dash_replay)
 
-            # Gradient-based update
-            self.optimizer.zero_grads()
-            loss = self.forward(B['obs'], B['action'], B['reward'], B['obs2'], B['done'])
-            loss.backward()
-            self.optimizer.update()
+        loss = Variable(np.zeros((), 'float32'))
 
-            return loss.data
+        # if self.GPU:
+        #     loss.to_gpu()
 
-        else: # exploration phase
+        self.model.reset()
 
-            return float('nan') # self.forward(B['obs'], B['action'], B['reward'], B['obs2'], B['done']).data
+        for frame in xrange(self.nframes):
+
+            # if self.GPU:
+            #     t.to_gpu()
+            #     x.to_gpu()
+
+            loss += self.forward(B['obs'][:,frame], B['action'], B['reward'], B['obs2'][:,frame], B['done'])
+
+            # learning phase
+            if time >= self.nexplore and ((frame + 1) % 10 == 0 or (frame + 1) == self.nframes):
+                self.optimizer.zero_grads()
+                loss.backward()
+                loss.unchain_backward()
+                self.optimizer.update()
 
         # Target model update
         if time >= self.nexplore and np.mod(time, self.update_freq) == 0:
             self.target_model = copy.deepcopy(self.model)
+
+        return loss.data
 
     def forward(self, obs, action, reward, obs2, done):
         """

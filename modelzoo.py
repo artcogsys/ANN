@@ -18,6 +18,9 @@ class MLP(Chain):
         y  = self.l2(h1)
         return y
 
+    def reset(self):
+        pass
+
 class RNN(Chain):
     """
     Recurrent neural network
@@ -33,3 +36,6 @@ class RNN(Chain):
         h1 = F.relu(self.l1(x))
         y  = self.l2(h1)
         return y
+
+    def reset(self):
+        self.l1.reset_state()
