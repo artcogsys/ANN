@@ -61,6 +61,15 @@ class DQN(object):
         # initialize replay memory
         self.D = self.createBuffer(self.nbuffer)
 
+        # Iteration number
+        self.time = 0
+
+        # probability of random policy
+        self.epsilon = 0.1
+
+        # buffer to maintain last nframes observations
+        self.buffer = np.zeros([self.nframes, self.ninput], dtype='float32')
+
     def createBuffer(self,n):
         """
         Create a replay buffer of size n
@@ -102,7 +111,7 @@ class DQN(object):
 
         return B
 
-    def storeExperience(self, time, obs, action, reward, obs2, done):
+    def storeExperience(self, obs, action, reward, obs2, done):
         """
         Store new experience in replay buffer.
 
@@ -116,7 +125,7 @@ class DQN(object):
 
         """
 
-        idx = (time - 1) % self.nbuffer # time counter is relative to obs2
+        idx = (self.time - 1) % self.nbuffer # time counter is relative to obs2
 
         self.D['action'][idx] = action
         self.D['reward'][idx] = reward
@@ -138,7 +147,7 @@ class DQN(object):
                 self.D['obs'][idx - frame, self.nframes - frame - 1] = obs
                 self.D['obs2'][idx - frame, self.nframes - frame - 1] = obs2
 
-    def experienceReplay(self, time):
+    def experienceReplay(self):
         """
         Replay experience (batch) and perform backpropagation.
 
@@ -150,14 +159,14 @@ class DQN(object):
 
         """
 
-        # Select random examples in the buffer
-        idx = np.random.randint(0, np.min([time, self.nbuffer]), (self.nreplay, 1))
-        B = self.getBuffer(idx)
+        if self.time >= self.nexplore: # learning phase
 
-        if time >= self.nexplore: # learning phase
+            # Select random examples in the buffer
+            idx = np.random.randint(0, np.min([self.time, self.nbuffer]), (self.nreplay, 1))
+            B = self.getBuffer(idx)
 
             # Target model update
-            if (time >= self.nexplore) and (time % self.update_freq == 0):
+            if (self.time >= self.nexplore) and (self.time % self.update_freq == 0):
                 self.target_model = copy.deepcopy(self.model)
 
 #                 s_replay = cuda.to_gpu(s_replay)
@@ -237,3 +246,17 @@ class DQN(object):
             action = np.argmax(Q)
 
         return action
+
+    def act(self, obs, reward, done):
+
+        # Update buffer
+        self.buffer = np.vstack([self.buffer[1:],obs])
+
+        #print self.buffer
+
+        action = self.e_greedy(self.buffer.reshape(1,self.buffer.size), self.epsilon)
+
+        return action
+
+    def reset(self):
+        self.model.reset()
