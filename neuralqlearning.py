@@ -42,8 +42,8 @@ class NeuralQAgent(object):
         # keep track of number of training iterations
         self.trainiter = 0
 
-        # debug mode
-        self.debug = True
+        # verbose mode for debugging
+        self.verbose = True
 
     def addBuffer(self, obs, action, reward, done):
         """
@@ -120,7 +120,11 @@ class DQN(NeuralQAgent):
 
         # Target model update
         if self.trainiter % self.update_freq == 0:
+
             self.target_model = copy.deepcopy(self.model)
+
+            if self.verbose:
+                print 'updating target model'
 
         # Gradient-based update
         self.optimizer.zero_grads()
@@ -194,7 +198,7 @@ class DQN(NeuralQAgent):
 
             action = np.random.randint(self.noutput)
 
-            if self.debug:
+            if self.verbose:
                 print 'random action: {0}'.format(action)
 
         else:
@@ -204,7 +208,7 @@ class DQN(NeuralQAgent):
             Q = self.model(Variable(experience)).data
             action = np.argmax(Q)
 
-            if self.debug:
+            if self.verbose:
                 print 'greedy action: {0}; experience {1}'.format(action, experience)
 
         return action
