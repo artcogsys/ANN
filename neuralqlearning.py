@@ -5,75 +5,219 @@ import chainer.links as L
 import copy
 import modelzoo
 
-class NeuralQAgent(object):
+# CAN WE REMOVE BUFFER AND ASSUME ITS THE LAST ENTRY IN THE CIRCULAR BUFFER?
+# CAN WE CREATE A SIZE 1 BUFFER FOR TABULARQ AND REMOVE learn dependence on obs,act,reward?
+
+class CircularBuffer(object):
     """
-    Base class for neural-network based Q learning
+    Circular buffer used to store replay memory
     """
 
-    def __init__(self, ninput, noutput, **kwargs):
-
-        self.ninput = ninput
-        self.noutput = noutput
-
-        # size of the replay buffer D
-        self.nbuffer = kwargs.get('nbuffer', 10**3)
-
-        # number of experiences to replay (batch size)
-        self.nreplay = kwargs.get('nreplay',32)
-
-        # (maximal) number of frames to consider
-        self.nframes = kwargs.get('nframes', 2)
-
-        # discounting factor
-        self.gamma = kwargs.get('gamma', 0.99)
-
-        # update frequency of the target model
-        self.update_freq = kwargs.get('update_freq',10**2)
-
-        # initialize replay memory
-        self.obs = np.zeros([self.nbuffer, self.ninput], dtype=np.float32)
-        self.action = np.zeros([self.nbuffer, 1], dtype=np.uint8)
-        self.reward = np.zeros([self.nbuffer, 1], dtype=np.float32)
-        self.done = np.zeros([self.nbuffer, 1], dtype=np.bool)
-
-        # current index of the last element in the buffer
-        self.bufidx = -1
-
-        # keep track of number of training iterations
-        self.trainiter = 0
-
-        # verbose mode for debugging
-        self.verbose = True
-
-    def addBuffer(self, obs, action, reward, done):
+    def __init__(self, nbuffer, nvars, dtype):
         """
-        Store new experience in replay buffer.
-
-        Input:
-        obs    : current obs
-        action : current action
-        reward : received reward
-        done : whether or not the episode is done
-
+        Create circular buffer which contains nbuffer items of length nvariables and type dtype
         """
+
+        # size of the buffer
+        self.nbuffer = nbuffer
+
+        # nr of variables for each item
+        self.nvars = nvars
+
+        # data type of the buffer
+        self.dtype = dtype
+
+        # Initialize buffer
+        self.buffer = np.zeros([self.nbuffer, self.nvars], dtype=self.dtype)
+
+        # Index of the next element in the buffer that can be overwritten
+        self.bufidx = 0
+
+        # Flags whether the whole buffer has been filled
+        self.full = False
+
+    def put(self, item):
+        """
+        Store new item in buffer
+        :param item
+        """
+
+        # Store experience
+        self.buffer[self.bufidx, :] = item
 
         # Increase buffer counter
         self.bufidx += 1
 
+        # Set buffer to filled
+        if self.bufidx >= self.nbuffer:
+            self.full = True
+
         # Index of circular memory
         self.bufidx = self.bufidx % self.nbuffer
 
-        # Store experience
-        self.obs[self.bufidx, :] = obs
-        self.action[self.bufidx] = action
-        self.reward[self.bufidx] = reward
-        self.done[self.bufidx] = done
+    def get(self, n):
+        """
+        Get nth element in the buffer
 
+        :param n: array of numbers
+        :return:
+        """
 
-class DQN(NeuralQAgent):
+        if not self.full:
+
+            return self.buffer[n]
+
+        else:
+
+            idx = map(lambda x: (x + self.bufidx) % self.nbuffer, n)
+
+            return self.buffer[idx]
+
+class QLearner(object):
+    """
+    Base class for any Q learning
+    """
+
+    def __init__(self, ninput, noutput, **kwargs):
+
+        # Number of input variables
+        self.ninput = ninput
+
+        # Number of actions
+        self.noutput = noutput
+
+        # (maximal) number of observation frames to consider
+        self.nframes = kwargs.get('nframes', 3)
+
+        # discounting factor
+        self.gamma = kwargs.get('gamma', 0.99)
+
+        # verbose mode for debugging
+        self.verbose = True
+
+    def reset(self):
+        pass
+
+class TabularQLearner(QLearner):
+    """
+    Tabular Q learning
+    """
+
+    def __init__(self, observations, noutput, **kwargs):
+        super(TabularQLearner, self).__init__(np.nan, noutput, **kwargs)
+        """
+        :param observations: list of possible observations
+        :param noutput: number of possible actions
+        """
+
+        # Convert observations to nitems x nvariables
+        observations = map(lambda x: tuple([item for sublist in x for item in sublist]), observations)
+
+        # Number of input variables
+        self.ninput = len(observations[0])/self.nframes
+
+        # Number of table entries
+        self.nentries = len(observations)
+
+        # Dictionary which maps immutable observations to table entries
+        self.dictionary = dict(zip(observations,np.arange(self.nentries)))
+
+        # Q Table
+        self.QTable = np.zeros([self.nentries, self.noutput], dtype=np.float32)
+
+        # Working memory buffer to maintain last nframes observations
+        self.buffer = np.empty([self.nframes, self.ninput], dtype='float32')
+        self.buffer[:] = np.nan
+
+        # Learning rate
+        self.eta = 10**-3
+
+    def learn(self, action, obs2, reward):
+
+        if not np.isnan(self.buffer).any():
+
+            # an experience is a vector representation of nframes observations
+            experience = self.buffer.reshape(1, self.buffer.size)
+
+            q1idx = self.dictionary[tuple(experience.tolist()[0])]
+            Q1 = self.QTable[q1idx,:]
+
+            experience2 = np.vstack([self.buffer[1:], obs2]).reshape(1, self.buffer.size)
+
+            # Compute q values based on next obs
+            q2idx = self.dictionary[tuple(experience2.tolist()[0])]
+            Q2 = self.QTable[q2idx,:]
+
+            # Get actions that produce maximal q value
+            maxQ2 = np.max(Q2)
+
+            # Compute temporal difference error
+            TD_error = (reward + self.gamma * maxQ2 - self.QTable[q1idx,action])
+
+            # Update table
+            self.QTable[q1idx,action] += self.eta * TD_error
+
+            return TD_error**2
+
+        else:
+            return np.nan
+
+    def act(self, obs, epsilon=0.1):
+        """"
+        Perform epsilon-greedy action.
+
+        Input:
+        epsilon: Probability of random action
+        """
+
+        # Update buffer
+        self.buffer = np.vstack([self.buffer[1:], obs])
+
+        if np.random.rand() < epsilon:
+
+            action = np.random.randint(self.noutput)
+
+            # if self.verbose:
+            #     print 'random action: {0}'.format(action)
+
+        else:
+
+            experience = self.buffer.reshape(1, self.buffer.size)
+
+            entry = self.dictionary[tuple(experience.tolist()[0])]
+
+            action = np.argmax(self.QTable[entry,:])
+
+            if self.verbose:
+                print 'greedy action: {0}; experience {1}'.format(action, experience)
+
+        return action
+
+class DQN(QLearner):
+    """
+    Implementation of the DQN model
+    """
 
     def __init__(self, ninput, noutput, **kwargs):
         super(DQN, self).__init__(ninput, noutput, **kwargs)
+
+        # size of the replay buffer D
+        self.nbuffer = kwargs.get('nbuffer', 10 ** 3)
+
+        # number of experiences to replay (batch size)
+        self.nreplay = kwargs.get('nreplay', 32)
+
+        # update frequency of the target model
+        self.update_freq = kwargs.get('update_freq', 10 ** 2)
+
+        # initialize replay memory
+        self.obs = CircularBuffer(self.nbuffer, self.ninput, np.float32)
+        self.action = CircularBuffer(self.nbuffer, 1, np.uint8)
+        self.reward = CircularBuffer(self.nbuffer, 1, np.float32)
+        self.done = CircularBuffer(self.nbuffer, 1, np.bool)
+
+        # keep track of number of training iterations
+        self.trainiter = 0
 
         # define model
         self.nhidden = kwargs.get('nhidden',10)
@@ -90,25 +234,43 @@ class DQN(NeuralQAgent):
         # working memory buffer to maintain last nframes observations
         self.buffer = np.zeros([self.nframes, self.ninput], dtype='float32')
 
+    def addBuffer(self, _obs, _action, _reward, _done):
+        """
+        Store new experience in replay buffer.
+
+        Input:
+        obs    : current obs
+        action : current action
+        reward : received reward
+        done : whether or not the episode is done
+
+        """
+
+        # Store experience
+        self.obs.put(_obs)
+        self.action.put(_action)
+        self.reward.put(_reward)
+        self.done.put(_done)
+
     def getBuffer(self):
         """
-        Get nreplay items from buffer. Agent-specific.
+        Get nreplay items of length self.nframes from buffer.
         """
 
         # Select random examples in the buffer
-        idx = np.random.randint(self.nframes-1, self.nbuffer-1, (self.nreplay, 1))
+        idx = np.random.randint(self.nframes - 1, self.nbuffer, (self.nreplay, 1))
 
         # get all frames to build multiple frame observation
         fidx = map(lambda x: x - np.arange(0, self.nframes), idx)
-        obs = self.obs[fidx].reshape(self.nreplay, self.ninput * self.nframes)
+        obs = self.obs.get(fidx).reshape(self.nreplay, self.ninput * self.nframes)
 
         # same for observation at next point in time
-        fidx2 = map(lambda x: x + 1,fidx)
-        obs2 = self.obs[fidx].reshape(self.nreplay, self.ninput * self.nframes)
+        fidx2 = map(lambda x: x + 1, fidx)
+        obs2 = self.obs.get(fidx2).reshape(self.nreplay, self.ninput * self.nframes)
 
-        return obs, self.action[idx], self.reward[idx], obs2, self.done[idx]
+        return obs, self.action.get(idx), self.reward.get(idx), obs2, self.done.get(idx)
 
-    def experienceReplay(self):
+    def learn(self):
         """
         Replay experience (batch) and perform backpropagation.
 
@@ -185,7 +347,7 @@ class DQN(NeuralQAgent):
 
     def act(self, obs, epsilon=0.1):
         """"
-        Perform epsilon-greedy action.
+        Perform epsilon-greedy action. Acting is base on nframes observations
 
         Input:
         epsilon: Probability of random action
@@ -198,8 +360,8 @@ class DQN(NeuralQAgent):
 
             action = np.random.randint(self.noutput)
 
-            if self.verbose:
-                print 'random action: {0}'.format(action)
+            # if self.verbose:
+            #     print 'random action: {0}'.format(action)
 
         else:
 
