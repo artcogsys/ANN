@@ -4,74 +4,7 @@ import chainer.functions as F
 import chainer.links as L
 import copy
 import modelzoo
-
-# CAN WE REMOVE BUFFER AND ASSUME ITS THE LAST ENTRY IN THE CIRCULAR BUFFER?
-# CAN WE CREATE A SIZE 1 BUFFER FOR TABULARQ AND REMOVE learn dependence on obs,act,reward?
-
-class CircularBuffer(object):
-    """
-    Circular buffer used to store replay memory
-    """
-
-    def __init__(self, nbuffer, nvars, dtype):
-        """
-        Create circular buffer which contains nbuffer items of length nvariables and type dtype
-        """
-
-        # size of the buffer
-        self.nbuffer = nbuffer
-
-        # nr of variables for each item
-        self.nvars = nvars
-
-        # data type of the buffer
-        self.dtype = dtype
-
-        # Initialize buffer
-        self.buffer = np.zeros([self.nbuffer, self.nvars], dtype=self.dtype)
-
-        # Index of the next element in the buffer that can be overwritten
-        self.bufidx = 0
-
-        # Flags whether the whole buffer has been filled
-        self.full = False
-
-    def put(self, item):
-        """
-        Store new item in buffer
-        :param item
-        """
-
-        # Store experience
-        self.buffer[self.bufidx, :] = item
-
-        # Increase buffer counter
-        self.bufidx += 1
-
-        # Set buffer to filled
-        if self.bufidx >= self.nbuffer:
-            self.full = True
-
-        # Index of circular memory
-        self.bufidx = self.bufidx % self.nbuffer
-
-    def get(self, n):
-        """
-        Get nth element in the buffer
-
-        :param n: array of numbers
-        :return:
-        """
-
-        if not self.full:
-
-            return self.buffer[n]
-
-        else:
-
-            idx = map(lambda x: (x + self.bufidx) % self.nbuffer, n)
-
-            return self.buffer[idx]
+from circularbuffer import CircularBuffer
 
 class QLearner(object):
     """
@@ -87,13 +20,55 @@ class QLearner(object):
         self.noutput = noutput
 
         # (maximal) number of observation frames to consider
-        self.nframes = kwargs.get('nframes', 3)
+        self.nframes = kwargs.get('nframes', 2)
+
+        # By default the buffer has the same size as the number of frames to store
+        self.nbuffer = kwargs.get('nbuffer', self.nframes)
 
         # discounting factor
         self.gamma = kwargs.get('gamma', 0.99)
 
         # verbose mode for debugging
         self.verbose = True
+
+        # initialize replay memory (not the most efficient but definitely the cleanest way)
+        self.obs = CircularBuffer(self.nbuffer, self.ninput, np.float32)
+        self.action = CircularBuffer(self.nbuffer, 1, np.uint8)
+        self.reward = CircularBuffer(self.nbuffer, 1, np.float32)
+        self.obs2 = CircularBuffer(self.nbuffer, self.ninput, np.float32)
+        self.done = CircularBuffer(self.nbuffer, 1, np.bool)
+
+    def addBuffer(self, _obs, _action, _reward, _obs2, _done):
+        """
+        Store new experience in replay buffer.
+
+        Input:
+        obs    : current obs
+        action : current action
+        reward : received reward
+        done : whether or not the episode is done
+
+        """
+
+        # Store experience
+        self.obs.put(_obs)
+        self.action.put(_action)
+        self.reward.put(_reward)
+        self.obs2.put(_obs2)
+        self.done.put(_done)
+
+    def getBuffer(self, _nreplay=1):
+        """
+        Get nreplay random experiences from the buffer
+        """
+
+        # Select random examples in the buffer
+        idx = np.random.randint(self.nframes - 1, self.nbuffer, (_nreplay, 1))
+
+        # get all frames to build multiple frame observation
+        fidx = map(lambda x: x - np.arange(self.nframes-1,-1,-1), idx)
+
+        return self.obs.get(fidx), self.action.get(idx), self.reward.get(idx), self.obs2.get(fidx), self.done.get(idx)
 
     def reset(self):
         pass
@@ -103,15 +78,12 @@ class TabularQLearner(QLearner):
     Tabular Q learning
     """
 
-    def __init__(self, observations, noutput, **kwargs):
-        super(TabularQLearner, self).__init__(np.nan, noutput, **kwargs)
+    def __init__(self, ninput, noutput, observations, **kwargs):
+        super(TabularQLearner, self).__init__(ninput, noutput, **kwargs)
         """
         :param observations: list of possible observations
         :param noutput: number of possible actions
         """
-
-        # Number of input variables
-        self.ninput = len(observations[0])/self.nframes
 
         # Number of table entries
         self.nentries = len(observations)
@@ -122,28 +94,37 @@ class TabularQLearner(QLearner):
         # Q Table
         self.QTable = np.zeros([self.nentries, self.noutput], dtype=np.float32)
 
-        # Working memory buffer to maintain last nframes observations
-        self.buffer = np.empty([self.nframes, self.ninput], dtype='float32')
-        self.buffer[:] = np.nan
-
         # Learning rate
         self.eta = 10**-3
 
-    def learn(self, action, obs2, reward):
+    def tableIndex(self, obs):
+        """
+        Return table index of the observation; observation is a numpy array of nframes x nvariables
+        :param obs:
+        :return: table index
+        """
 
-        if not np.isnan(self.buffer).any():
+        experience = obs.flatten()
+        return self.dictionary[tuple(experience.tolist())]
 
-            # an experience is a vector representation of nframes observations
-            experience = self.buffer.reshape(1, self.buffer.size)
+    def learn(self):
 
-            q1idx = self.dictionary[tuple(experience.tolist()[0])]
+        obs, action, reward, obs2, done = self.getBuffer()
+
+        # obs = self.obs.get(np.arange(0,self.nframes))
+        # action = self.action.get([self.nframes-1])
+        # reward = self.reward.get([self.nframes-1])
+        # obs2 = self.obs2.get(np.arange(0,self.nframes))
+        # done = self.done.get([self.nframes-1])
+
+        if not np.isnan(obs).any():
+
+            # Compute q values based on current obs
+            q1idx = self.tableIndex(obs)
             Q1 = self.QTable[q1idx,:]
 
-            experience2 = np.vstack([self.buffer[1:], obs2]).reshape(1, self.buffer.size)
-
             # Compute q values based on next obs
-            q2idx = self.dictionary[tuple(experience2.tolist()[0])]
-            Q2 = self.QTable[q2idx,:]
+            Q2 = self.QTable[self.tableIndex(obs2),:]
 
             # Get actions that produce maximal q value
             maxQ2 = np.max(Q2)
@@ -167,8 +148,8 @@ class TabularQLearner(QLearner):
         epsilon: Probability of random action
         """
 
-        # Update buffer
-        self.buffer = np.vstack([self.buffer[1:], obs])
+        # # Update buffer
+        # self.buffer = np.vstack([self.buffer[1:], obs])
 
         if np.random.rand() < epsilon:
 
@@ -179,14 +160,20 @@ class TabularQLearner(QLearner):
 
         else:
 
-            experience = self.buffer.reshape(1, self.buffer.size)
+            obs = np.vstack([self.obs.get(np.arange(1, self.nframes)), obs])
 
-            entry = self.dictionary[tuple(experience.tolist()[0])]
+            if not np.isnan(obs).any():
 
-            action = np.argmax(self.QTable[entry,:])
+                entry = self.tableIndex(obs)
+
+                action = np.argmax(self.QTable[entry,:])
+
+            else:
+
+                action = np.random.randint(self.noutput)
 
             if self.verbose:
-                print 'greedy action: {0}; experience {1}'.format(action, experience)
+                print 'greedy action: {0}; experience {1}'.format(action, self.getBuffer()[0].flatten())
 
         return action
 
@@ -275,7 +262,7 @@ class DQN(QLearner):
         loss : TD error loss
         """
 
-        obs,act,reward,obs2,done = self.getBuffer()
+        obs,act,reward,obs2,done = self.getBuffer(self.nreplay)
 
         # Target model update
         if self.trainiter % self.update_freq == 0:
