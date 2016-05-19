@@ -110,9 +110,6 @@ class TabularQLearner(QLearner):
         :param noutput: number of possible actions
         """
 
-        # Convert observations to nitems x nvariables
-        observations = map(lambda x: tuple([item for sublist in x for item in sublist]), observations)
-
         # Number of input variables
         self.ninput = len(observations[0])/self.nframes
 
