@@ -70,6 +70,30 @@ class QLearner(object):
 
         return self.obs.get(fidx), self.action.get(idx), self.reward.get(idx), self.obs2.get(fidx), self.done.get(idx)
 
+    def act(self, obs, epsilon=0.1):
+        """"
+        Perform epsilon-greedy action.
+
+        Input:
+        epsilon: Probability of random action
+        """
+
+        if np.random.rand() < epsilon:
+
+            action = np.random.randint(self.noutput)
+
+            # if self.verbose:
+            #     print 'random action: {0}'.format(action)
+
+        else:
+
+            action = self.greedy_action(obs)
+
+            if self.verbose:
+                print 'greedy action: {0}; experience {1}'.format(action, self.getBuffer()[0].flatten())
+
+        return action
+
     def reset(self):
         pass
 
@@ -130,7 +154,12 @@ class TabularQLearner(QLearner):
             maxQ2 = np.max(Q2)
 
             # Compute temporal difference error
-            TD_error = (reward + self.gamma * maxQ2 - self.QTable[q1idx,action])
+            if not done:
+                TD_error = reward + self.gamma * maxQ2 - self.QTable[q1idx,action]
+            else:
+                TD_error = reward - self.QTable[q1idx,action]
+
+            # TD_error = (reward + self.gamma * maxQ2 - self.QTable[q1idx,action])
 
             # Update table
             self.QTable[q1idx,action] += self.eta * TD_error
@@ -140,40 +169,25 @@ class TabularQLearner(QLearner):
         else:
             return np.nan
 
-    def act(self, obs, epsilon=0.1):
-        """"
-        Perform epsilon-greedy action.
+    def greedy_action(self, obs):
+        """
+        Greedy action, returns best action according to the Q learner
 
-        Input:
-        epsilon: Probability of random action
+        :param obs:
+        :return: action
         """
 
-        # # Update buffer
-        # self.buffer = np.vstack([self.buffer[1:], obs])
+        obs = np.vstack([self.obs.get(np.arange(1, self.nframes)), obs])
 
-        if np.random.rand() < epsilon:
+        if not np.isnan(obs).any():
 
-            action = np.random.randint(self.noutput)
+            entry = self.tableIndex(obs)
 
-            # if self.verbose:
-            #     print 'random action: {0}'.format(action)
+            action = np.argmax(self.QTable[entry, :])
 
         else:
 
-            obs = np.vstack([self.obs.get(np.arange(1, self.nframes)), obs])
-
-            if not np.isnan(obs).any():
-
-                entry = self.tableIndex(obs)
-
-                action = np.argmax(self.QTable[entry,:])
-
-            else:
-
-                action = np.random.randint(self.noutput)
-
-            if self.verbose:
-                print 'greedy action: {0}; experience {1}'.format(action, self.getBuffer()[0].flatten())
+            action = np.random.randint(self.noutput)
 
         return action
 
@@ -185,28 +199,21 @@ class DQN(QLearner):
     def __init__(self, ninput, noutput, **kwargs):
         super(DQN, self).__init__(ninput, noutput, **kwargs)
 
-        # size of the replay buffer D
-        self.nbuffer = kwargs.get('nbuffer', 10 ** 3)
-
         # number of experiences to replay (batch size)
-        self.nreplay = kwargs.get('nreplay', 32)
+        self.nreplay = kwargs.get('nreplay', np.min([self.nbuffer-self.nframes+1, 32]))
+
+        # define number of hidden units
+        self.nhidden = kwargs.get('nhidden',10)
+
+        # define neural network
+        self.model = kwargs.get('model',modelzoo.MLP)
+        self.model = self.model(self.ninput*self.nframes, self.nhidden, self.noutput)
 
         # update frequency of the target model
         self.update_freq = kwargs.get('update_freq', 10 ** 2)
 
-        # initialize replay memory
-        self.obs = CircularBuffer(self.nbuffer, self.ninput, np.float32)
-        self.action = CircularBuffer(self.nbuffer, 1, np.uint8)
-        self.reward = CircularBuffer(self.nbuffer, 1, np.float32)
-        self.done = CircularBuffer(self.nbuffer, 1, np.bool)
-
         # keep track of number of training iterations
         self.trainiter = 0
-
-        # define model
-        self.nhidden = kwargs.get('nhidden',10)
-        self.model = kwargs.get('model',modelzoo.MLP)
-        self.model = self.model(self.ninput*self.nframes, self.nhidden, self.noutput)
 
         # target model is copy of defined model
         self.target_model = copy.deepcopy(self.model)
@@ -214,45 +221,6 @@ class DQN(QLearner):
         # SGD optimizer
         self.optimizer = optimizers.Adam(alpha=0.0001, beta1=0.5)
         self.optimizer.setup(self.model)
-
-        # working memory buffer to maintain last nframes observations
-        self.buffer = np.zeros([self.nframes, self.ninput], dtype='float32')
-
-    def addBuffer(self, _obs, _action, _reward, _done):
-        """
-        Store new experience in replay buffer.
-
-        Input:
-        obs    : current obs
-        action : current action
-        reward : received reward
-        done : whether or not the episode is done
-
-        """
-
-        # Store experience
-        self.obs.put(_obs)
-        self.action.put(_action)
-        self.reward.put(_reward)
-        self.done.put(_done)
-
-    def getBuffer(self):
-        """
-        Get nreplay items of length self.nframes from buffer.
-        """
-
-        # Select random examples in the buffer
-        idx = np.random.randint(self.nframes - 1, self.nbuffer, (self.nreplay, 1))
-
-        # get all frames to build multiple frame observation
-        fidx = map(lambda x: x - np.arange(0, self.nframes), idx)
-        obs = self.obs.get(fidx).reshape(self.nreplay, self.ninput * self.nframes)
-
-        # same for observation at next point in time
-        fidx2 = map(lambda x: x + 1, fidx)
-        obs2 = self.obs.get(fidx2).reshape(self.nreplay, self.ninput * self.nframes)
-
-        return obs, self.action.get(idx), self.reward.get(idx), obs2, self.done.get(idx)
 
     def learn(self):
         """
@@ -264,45 +232,41 @@ class DQN(QLearner):
 
         obs,act,reward,obs2,done = self.getBuffer(self.nreplay)
 
-        # Target model update
-        if self.trainiter % self.update_freq == 0:
+        if not np.isnan(obs).any():
 
-            self.target_model = copy.deepcopy(self.model)
+            # Target model update
+            if self.trainiter % self.update_freq == 0:
 
-            if self.verbose:
-                print 'updating target model'
+                self.target_model = copy.deepcopy(self.model)
 
-        # Gradient-based update
-        self.optimizer.zero_grads()
-        loss = self.forward(obs, act, reward, obs2, done)
-        loss.backward()
-        self.optimizer.update()
+                if self.verbose:
+                    print 'updating target model'
 
-        self.trainiter += 1
+            # Gradient-based update
+            self.optimizer.zero_grads()
+            loss = self.forward(obs, act, reward, obs2, done)
+            loss.backward()
+            self.optimizer.update()
 
-        return loss.data
+            self.trainiter += 1
+
+            return loss.data
+
+        else:
+
+            return np.nan
 
 
     def forward(self, obs, action, reward, obs2, done):
         """
         Compute loss after forward sweep
-
-        Input:
-        obs  : nbatch x nframes x nvariables (should become nbatch x nframes x npixels x npixels)
-        action : nbatch,
-        reward : nbatch x 1
-        obs2 : next obs; nbatch x nframes x nvariables
-        done   : nbatch x 1 ; flags end of an episode
-
-        obs is assumed continuous (float32), action is assumed uint8, reward is assumed continuous (float32)
-
         """
 
         # Compute q values based on current obs
-        Q1 = self.model(Variable(obs))
+        Q1 = self.model(Variable(obs.reshape([self.nreplay,self.nframes,self.ninput])))
 
         # Compute q values based on next obs
-        Q2 = self.target_model(Variable(obs2))
+        Q2 = self.target_model(Variable(obs2.reshape([self.nreplay,self.nframes,self.ninput])))
 
         # Get actions that produce maximal q value
         maxQ2 = np.max(Q2.data,1)
@@ -329,35 +293,24 @@ class DQN(QLearner):
 
         return loss
 
-    def act(self, obs, epsilon=0.1):
-        """"
-        Perform epsilon-greedy action. Acting is base on nframes observations
+    def greedy_action(self, obs):
+        """
+        Greedy action, returns best action according to the Q learner
 
-        Input:
-        epsilon: Probability of random action
+        :param obs:
+        :return: action
         """
 
-        # Update buffer
-        self.buffer = np.vstack([self.buffer[1:], obs])
+        # get the nframes last observations
+        obs = np.vstack([self.obs.get(np.arange(self.nbuffer - self.nframes + 1, self.nbuffer)), obs])
 
-        if np.random.rand() < epsilon:
+        if not np.isnan(obs).any():
 
-            action = np.random.randint(self.noutput)
-
-            # if self.verbose:
-            #     print 'random action: {0}'.format(action)
+            Q = self.model(Variable(obs.reshape([1,self.nframes,self.ninput]))).data
+            action = np.argmax(Q)
 
         else:
 
-            experience = self.buffer.reshape(1, self.buffer.size)
-
-            Q = self.model(Variable(experience)).data
-            action = np.argmax(Q)
-
-            if self.verbose:
-                print 'greedy action: {0}; experience {1}'.format(action, experience)
+            action = np.random.randint(self.noutput)
 
         return action
-
-    def reset(self):
-        self.model.reset()

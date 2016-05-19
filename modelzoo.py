@@ -11,16 +11,13 @@ class MLP(Chain):
     def __init__(self, ninput, nhidden, noutput):
         super(MLP, self).__init__(
             l1=L.Linear(ninput, nhidden),
-            l2=L.Linear(nhidden, noutput) #, initialW=np.zeros((noutput, nhidden), dtype=np.float32))
+            l2=L.Linear(nhidden, noutput, initialW=np.zeros((noutput, nhidden), dtype=np.float32))
         )
 
     def __call__(self, x):
         h1 = F.relu(self.l1(x))
         y  = self.l2(h1)
         return y
-
-    def reset(self):
-        pass
 
 class RNN(Chain):
     """
