@@ -24,6 +24,7 @@ class QLearner(object):
 
         # By default the buffer has the same size as the number of frames to store
         self.nbuffer = kwargs.get('nbuffer', self.nframes)
+        assert(self.nbuffer >= self.nframes)
 
         # discounting factor
         self.gamma = kwargs.get('gamma', 0.99)
@@ -63,10 +64,12 @@ class QLearner(object):
         """
 
         # Select random examples in the buffer
-        idx = np.random.randint(self.nframes - 1, self.nbuffer, (_nreplay, 1))
+        # shape must be nreplay x 1
+        idx = np.random.permutation(np.arange(self.nframes - 1, self.nbuffer))[0:_nreplay]
 
         # get all frames to build multiple frame observation
-        fidx = map(lambda x: x - np.arange(self.nframes-1,-1,-1), idx)
+        # shape must be nreplay x nframes
+        fidx = np.array(map(lambda x: x - np.arange(self.nframes-1,-1,-1), idx))
 
         return self.obs.get(fidx), self.action.get(idx), self.reward.get(idx), self.obs2.get(fidx), self.done.get(idx)
 
@@ -135,12 +138,6 @@ class TabularQLearner(QLearner):
 
         obs, action, reward, obs2, done = self.getBuffer()
 
-        # obs = self.obs.get(np.arange(0,self.nframes))
-        # action = self.action.get([self.nframes-1])
-        # reward = self.reward.get([self.nframes-1])
-        # obs2 = self.obs2.get(np.arange(0,self.nframes))
-        # done = self.done.get([self.nframes-1])
-
         if not np.isnan(obs).any():
 
             # Compute q values based on current obs
@@ -158,8 +155,6 @@ class TabularQLearner(QLearner):
                 TD_error = reward + self.gamma * maxQ2 - self.QTable[q1idx,action]
             else:
                 TD_error = reward - self.QTable[q1idx,action]
-
-            # TD_error = (reward + self.gamma * maxQ2 - self.QTable[q1idx,action])
 
             # Update table
             self.QTable[q1idx,action] += self.eta * TD_error
@@ -219,7 +214,8 @@ class DQN(QLearner):
         self.target_model = copy.deepcopy(self.model)
 
         # SGD optimizer
-        self.optimizer = optimizers.Adam(alpha=0.0001, beta1=0.5)
+        # self.optimizer = optimizers.Adam(alpha=0.0001, beta1=0.5)
+        self.optimizer = optimizers.RMSpropGraves(lr=0.00025, alpha=0.95, momentum=0.95, eps=0.0001)
         self.optimizer.setup(self.model)
 
     def learn(self):

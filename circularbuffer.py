@@ -54,13 +54,13 @@ class CircularBuffer(object):
         """
         Get elements from the buffer
 
-        :param idxs: array of numbers
-        :return: buffer contents
+        :param idxs: array of numbers of size nexamples x nframes
+        :return: buffer contents of size nexamples x nframes x nvariables
         """
 
         if self.full:
 
             # take buffer offset and size into account
-            idxs = map(lambda x: (x + self.offset + 1) % self.nbuffer, idxs)
+            idxs = np.array(map(lambda x: (x + self.offset + 1) % self.nbuffer, idxs))
 
         return self.buffer[idxs]

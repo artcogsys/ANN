@@ -10,7 +10,7 @@ class MLP(Chain):
 
     def __init__(self, ninput, nhidden, noutput):
         super(MLP, self).__init__(
-            l1=L.Linear(ninput, nhidden),
+            l1=L.Linear(ninput, nhidden, wscale=np.sqrt(2)),
             l2=L.Linear(nhidden, noutput, initialW=np.zeros((noutput, nhidden), dtype=np.float32))
         )
 
