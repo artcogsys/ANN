@@ -198,7 +198,7 @@ class DQN(QLearner):
         self.nreplay = kwargs.get('nreplay', np.min([self.nbuffer-self.nframes+1, 32]))
 
         # define number of hidden units
-        self.nhidden = kwargs.get('nhidden',10)
+        self.nhidden = kwargs.get('nhidden',5)
 
         # define neural network
         self.model = kwargs.get('model',modelzoo.MLP)
@@ -259,22 +259,26 @@ class DQN(QLearner):
         """
 
         # Compute q values based on current obs
-        Q1 = self.model(Variable(obs.reshape([self.nreplay,self.nframes,self.ninput])))
+        s = Variable(obs.reshape([self.nreplay,self.nframes,self.ninput]))
+        Q1 = self.model(s)
 
         # Compute q values based on next obs
-        Q2 = self.target_model(Variable(obs2.reshape([self.nreplay,self.nframes,self.ninput])))
+        s2 = Variable(obs2.reshape([self.nreplay,self.nframes,self.ninput]))
+        Q2 = self.target_model(s2)
 
         # Get actions that produce maximal q value
         maxQ2 = np.max(Q2.data,1)
 
         # Compute target q values
         target = np.copy(Q1.data)
+
         for i in xrange(self.nreplay):
 
+            # NOTE: DQN_AGENT_NATURE uses the sign of the reward; not the reward itself as in standard Q learning! Why?
             if not done[i]:
-                target[i, action[i]] = reward[i] + self.gamma * maxQ2[i]
+                target[i, action[i]] = np.sign(reward[i]) + self.gamma * maxQ2[i]
             else:
-                target[i, action[i]] = reward[i]
+                target[i, action[i]] = np.sign(reward[i])
 
         # Compute temporal difference error
         td_error = Variable(target) - Q1
