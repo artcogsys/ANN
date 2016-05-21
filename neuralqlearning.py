@@ -85,15 +85,16 @@ class QLearner(object):
 
             action = np.random.randint(self.noutput)
 
-            # if self.verbose:
-            #     print 'random action: {0}'.format(action)
+            if self.verbose:
+                print 'random action: {0}'.format(action)
 
         else:
 
             action = self.greedy_action(obs)
 
+            # analyseer actie lijst; makes sense? Waarom werkt het wel bij nframes=2 voor tabularq???
             if self.verbose:
-                print 'greedy action: {0}; experience {1}'.format(action, self.getBuffer()[0].flatten())
+                print 'greedy action: {0}'.format(action)
 
         return action
 
@@ -174,6 +175,9 @@ class TabularQLearner(QLearner):
 
         obs = np.vstack([self.obs.get(np.arange(1, self.nframes)), obs])
 
+        if self.verbose:
+            print 'input observation: {0}'.format(obs.flatten())
+
         if not np.isnan(obs).any():
 
             entry = self.tableIndex(obs)
@@ -198,14 +202,14 @@ class DQN(QLearner):
         self.nreplay = kwargs.get('nreplay', np.min([self.nbuffer-self.nframes+1, 32]))
 
         # define number of hidden units
-        self.nhidden = kwargs.get('nhidden',5)
+        self.nhidden = kwargs.get('nhidden',20)
 
         # define neural network
         self.model = kwargs.get('model',modelzoo.MLP)
         self.model = self.model(self.ninput*self.nframes, self.nhidden, self.noutput)
 
         # update frequency of the target model
-        self.update_freq = kwargs.get('update_freq', 10 ** 2)
+        self.update_freq = kwargs.get('update_freq', 10 ** 3)
 
         # keep track of number of training iterations
         self.trainiter = 0
@@ -215,7 +219,7 @@ class DQN(QLearner):
 
         # SGD optimizer
         # self.optimizer = optimizers.Adam(alpha=0.0001, beta1=0.5)
-        self.optimizer = optimizers.RMSpropGraves(lr=0.00025, alpha=0.95, momentum=0.95, eps=0.0001)
+        self.optimizer = optimizers.RMSpropGraves(lr=0.00025, alpha=0.95, momentum=0.95, eps=0.01)
         self.optimizer.setup(self.model)
 
     def learn(self):
@@ -303,6 +307,9 @@ class DQN(QLearner):
 
         # get the nframes last observations
         obs = np.vstack([self.obs.get(np.arange(self.nbuffer - self.nframes + 1, self.nbuffer)), obs])
+
+        if self.verbose:
+            print 'input observation: {0}'.format(obs.flatten())
 
         if not np.isnan(obs).any():
 
