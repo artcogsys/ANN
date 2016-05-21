@@ -278,7 +278,8 @@ class DQN(QLearner):
 
         for i in xrange(self.nreplay):
 
-            # NOTE: DQN_AGENT_NATURE uses the sign of the reward; not the reward itself as in standard Q learning! Why?
+            # NOTE: DQN_AGENT_NATURE uses the sign of the reward; not the reward itself as in standard Q learning!
+            # Can be problematic for certain environments that e.g. only have positive rewards
             if not done[i]:
                 target[i, action[i]] = np.sign(reward[i]) + self.gamma * maxQ2[i]
             else:
