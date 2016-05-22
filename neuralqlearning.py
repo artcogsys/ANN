@@ -8,9 +8,9 @@ from circularbuffer import CircularBuffer
 import matplotlib.pyplot as plt
 
 
-def unique_rows(data):
-    sorted_data =  data[np.lexsort(data.T),:]
-    return np.append([True],np.any(np.diff(sorted_data,axis=0),1))
+# def unique_rows(data):
+#     sorted_data =  data[np.lexsort(data.T),:]
+#     return np.append([True],np.any(np.diff(sorted_data,axis=0),1))
 
 class QLearner(object):
     """
@@ -69,12 +69,10 @@ class QLearner(object):
         Get nreplay random experiences from the buffer
         """
 
-        # Select random examples in the buffer
-        # shape must be nreplay x 1
-        idx = np.random.permutation(np.arange(self.nframes - 1, self.nbuffer))[0:_nreplay]
+        idx = np.random.permutation(np.arange(self.nframes - 1, self.obs.buffer_size()))[0:_nreplay]
 
         # get all frames to build multiple frame observation
-        # shape must be nreplay x nframes
+        # shape is nreplay x nframes
         fidx = np.array(map(lambda x: x - np.arange(self.nframes-1,-1,-1), idx))
 
         return self.obs.get(fidx), self.action.get(idx), self.reward.get(idx), self.obs2.get(fidx), self.done.get(idx)
@@ -98,7 +96,6 @@ class QLearner(object):
 
             action = self.greedy_action(obs)
 
-            # analyseer actie lijst; makes sense? Waarom werkt het wel bij nframes=2 voor tabularq???
             if self.verbose:
                 print 'greedy action: {0}'.format(action)
 
@@ -106,6 +103,22 @@ class QLearner(object):
 
     def reset(self):
         pass
+
+    def getExperience(self,obs):
+        """
+        get experience defined as last nframes-1 observations and the final observation
+
+        :param obs:
+        :return: experience
+        """
+
+        # index of the last element in the buffer
+        idx = self.obs.idx
+
+        if idx >= self.nframes + 2:
+            return np.vstack([self.obs.get(np.arange(idx - self.nframes + 2, idx+1)), obs])
+        else:
+            return np.nan
 
 class TabularQLearner(QLearner):
     """
@@ -179,14 +192,14 @@ class TabularQLearner(QLearner):
         :return: action
         """
 
-        obs = np.vstack([self.obs.get(np.arange(1, self.nframes)), obs])
+        experience = self.getExperience(obs)
 
         if self.verbose:
-            print 'input observation: {0}'.format(obs.flatten())
+            print 'input observation: {0}'.format(experience.flatten())
 
-        if not np.isnan(obs).any():
+        if not np.isnan(experience).any():
 
-            entry = self.tableIndex(obs)
+            entry = self.tableIndex(experience)
 
             action = np.argmax(self.QTable[entry, :])
 
@@ -214,12 +227,6 @@ class DQN(QLearner):
         self.model = kwargs.get('model',modelzoo.MLP)
         self.model = self.model(self.ninput*self.nframes, self.nhidden, self.noutput)
 
-        # # update frequency of the target model
-        # self.update_freq = kwargs.get('update_freq', 10 ** 3)
-        #
-        # # keep track of number of training iterations
-        # self.trainiter = 0
-
         # target model is copy of defined model
         self.target_model = copy.deepcopy(self.model)
 
@@ -241,40 +248,19 @@ class DQN(QLearner):
 
         obs,act,reward,obs2,done = self.getBuffer(self.nreplay)
 
-        if not np.isnan(obs).any():
-
-            # d1 = obs.reshape([obs.shape[0], obs.shape[1] * obs.shape[2]])
-            # d2 = obs2.reshape([obs.shape[0], obs.shape[1] * obs.shape[2]])
-            # plt.subplot(131)
-            # plt.imshow(d1)
-            # plt.subplot(132)
-            # plt.imshow(act)
-            # plt.subplot(133)
-            # plt.imshow(d2)
-            # plt.show()
-
-            # # Target model update
-            # if self.trainiter % self.update_freq == 0:
-            #
-            #     self.target_model = copy.deepcopy(self.model)
-            #
-            #     if self.verbose:
-            #         print 'updating target model'
+        if not np.isnan(obs).any() and not obs.size == 0:
 
             # Soft updating of target model
             model_params = dict(self.model.namedparams())
             target_model_params = dict(self.target_model.namedparams())
-            for name in target_model_params:
-                target_model_params[name].data = self.tau * model_params[name].data \
-                                                 + (1 - self.tau) * target_model_params[name].data
+            for i in target_model_params:
+                target_model_params[i].data = self.tau * model_params[i].data + (1 - self.tau) * target_model_params[i].data
 
             # Gradient-based update
             self.optimizer.zero_grads()
             loss = self.forward(obs, act, reward, obs2, done)
             loss.backward()
             self.optimizer.update()
-
-            # self.trainiter += 1
 
             return loss.data
 
@@ -289,11 +275,11 @@ class DQN(QLearner):
         """
 
         # Compute q values based on current obs
-        s = Variable(obs.reshape([self.nreplay,self.nframes,self.ninput]))
+        s = Variable(obs) # obs.reshape([self.nreplay,self.nframes,self.ninput]))
         Q1 = self.model(s)
 
         # Compute q values based on next obs
-        s2 = Variable(obs2.reshape([self.nreplay,self.nframes,self.ninput]))
+        s2 = Variable(obs2) # obs2.reshape([self.nreplay,self.nframes,self.ninput]))
         Q2 = self.target_model(s2)
 
         # Get actions that produce maximal q value
@@ -302,7 +288,7 @@ class DQN(QLearner):
         # Compute target q values
         target = np.copy(Q1.data)
 
-        for i in xrange(self.nreplay):
+        for i in xrange(obs.shape[0]):
 
             # NOTE: DQN_AGENT_NATURE uses the sign of the reward; not the reward itself as in standard Q learning!
             # Can be problematic for certain environments that e.g. only have positive rewards
@@ -319,7 +305,7 @@ class DQN(QLearner):
         td_clip = td_error * (abs(td_error.data) <= 1) + td_error/abs(td_tmp) * (abs(td_error.data) > 1)
 
         # Compute MSE of the error against zero
-        zero_val = Variable(np.zeros((self.nreplay, self.noutput), dtype=np.float32))
+        zero_val = Variable(np.zeros((obs.shape[0], self.noutput), dtype=np.float32))
         loss = F.mean_squared_error(td_clip, zero_val)
 
         return loss
@@ -333,14 +319,14 @@ class DQN(QLearner):
         """
 
         # get the nframes last observations
-        obs = np.vstack([self.obs.get(np.arange(self.nbuffer - self.nframes + 1, self.nbuffer)), obs])
+        experience = getExperience(obs)
 
         if self.verbose:
-            print 'input observation: {0}'.format(obs.flatten())
+            print 'input observation: {0}'.format(experience.flatten())
 
-        if not np.isnan(obs).any():
+        if not np.isnan(experience).any():
 
-            Q = self.model(Variable(obs.reshape([1,self.nframes,self.ninput]))).data
+            Q = self.model(Variable(experience.reshape([1,self.nframes,self.ninput]))).data
             action = np.argmax(Q)
 
         else:
