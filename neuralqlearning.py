@@ -5,6 +5,12 @@ import chainer.links as L
 import copy
 import modelzoo
 from circularbuffer import CircularBuffer
+import matplotlib.pyplot as plt
+
+
+def unique_rows(data):
+    sorted_data =  data[np.lexsort(data.T),:]
+    return np.append([True],np.any(np.diff(sorted_data,axis=0),1))
 
 class QLearner(object):
     """
@@ -30,7 +36,7 @@ class QLearner(object):
         self.gamma = kwargs.get('gamma', 0.99)
 
         # verbose mode for debugging
-        self.verbose = True
+        self.verbose = kwargs.get('verbose', True)
 
         # initialize replay memory (not the most efficient but definitely the cleanest way)
         self.obs = CircularBuffer(self.nbuffer, self.ninput, np.float32)
@@ -208,14 +214,17 @@ class DQN(QLearner):
         self.model = kwargs.get('model',modelzoo.MLP)
         self.model = self.model(self.ninput*self.nframes, self.nhidden, self.noutput)
 
-        # update frequency of the target model
-        self.update_freq = kwargs.get('update_freq', 10 ** 3)
-
-        # keep track of number of training iterations
-        self.trainiter = 0
+        # # update frequency of the target model
+        # self.update_freq = kwargs.get('update_freq', 10 ** 3)
+        #
+        # # keep track of number of training iterations
+        # self.trainiter = 0
 
         # target model is copy of defined model
         self.target_model = copy.deepcopy(self.model)
+
+        # update rate of target model: target_model = tau * model + (1 - tau) * target_model
+        self.tau = 0.01
 
         # SGD optimizer
         # self.optimizer = optimizers.Adam(alpha=0.0001, beta1=0.5)
@@ -234,13 +243,30 @@ class DQN(QLearner):
 
         if not np.isnan(obs).any():
 
-            # Target model update
-            if self.trainiter % self.update_freq == 0:
+            # d1 = obs.reshape([obs.shape[0], obs.shape[1] * obs.shape[2]])
+            # d2 = obs2.reshape([obs.shape[0], obs.shape[1] * obs.shape[2]])
+            # plt.subplot(131)
+            # plt.imshow(d1)
+            # plt.subplot(132)
+            # plt.imshow(act)
+            # plt.subplot(133)
+            # plt.imshow(d2)
+            # plt.show()
 
-                self.target_model = copy.deepcopy(self.model)
+            # # Target model update
+            # if self.trainiter % self.update_freq == 0:
+            #
+            #     self.target_model = copy.deepcopy(self.model)
+            #
+            #     if self.verbose:
+            #         print 'updating target model'
 
-                if self.verbose:
-                    print 'updating target model'
+            # Soft updating of target model
+            model_params = dict(self.model.namedparams())
+            target_model_params = dict(self.target_model.namedparams())
+            for name in target_model_params:
+                target_model_params[name].data = self.tau * model_params[name].data \
+                                                 + (1 - self.tau) * target_model_params[name].data
 
             # Gradient-based update
             self.optimizer.zero_grads()
@@ -248,7 +274,7 @@ class DQN(QLearner):
             loss.backward()
             self.optimizer.update()
 
-            self.trainiter += 1
+            # self.trainiter += 1
 
             return loss.data
 
