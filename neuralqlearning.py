@@ -1,16 +1,11 @@
 import numpy as np
-from chainer import cuda, Chain, Variable, optimizers
+from chainer import cuda, Chain, Variable, optimizers, serializers
 import chainer.functions as F
 import chainer.links as L
 import copy
 import modelzoo
 from circularbuffer import CircularBuffer
 import matplotlib.pyplot as plt
-
-
-# def unique_rows(data):
-#     sorted_data =  data[np.lexsort(data.T),:]
-#     return np.append([True],np.any(np.diff(sorted_data,axis=0),1))
 
 class QLearner(object):
     """
@@ -69,7 +64,13 @@ class QLearner(object):
         Get nreplay random experiences from the buffer
         """
 
-        idx = np.random.permutation(np.arange(self.nframes - 1, self.obs.buffer_size()))[0:_nreplay]
+        # Select random examples in the buffer
+        if self.obs.full:
+            nitems = self.nbuffer
+        else:
+            nitems = self.obs.offset+1
+
+        idx = np.random.permutation(np.arange(self.nframes - 1, nitems))[0:_nreplay]
 
         # get all frames to build multiple frame observation
         # shape is nreplay x nframes
@@ -96,6 +97,7 @@ class QLearner(object):
 
             action = self.greedy_action(obs)
 
+            # analyseer actie lijst; makes sense? Waarom werkt het wel bij nframes=2 voor tabularq???
             if self.verbose:
                 print 'greedy action: {0}'.format(action)
 
@@ -103,22 +105,6 @@ class QLearner(object):
 
     def reset(self):
         pass
-
-    def getExperience(self,obs):
-        """
-        get experience defined as last nframes-1 observations and the final observation
-
-        :param obs:
-        :return: experience
-        """
-
-        # index of the last element in the buffer
-        idx = self.obs.idx
-
-        if idx >= self.nframes + 2:
-            return np.vstack([self.obs.get(np.arange(idx - self.nframes + 2, idx+1)), obs])
-        else:
-            return np.nan
 
 class TabularQLearner(QLearner):
     """
@@ -192,14 +178,14 @@ class TabularQLearner(QLearner):
         :return: action
         """
 
-        experience = self.getExperience(obs)
+        obs = np.vstack([self.obs.get(np.arange(1, self.nframes)), obs])
 
         if self.verbose:
-            print 'input observation: {0}'.format(experience.flatten())
+            print 'input observation: {0}'.format(obs.flatten())
 
-        if not np.isnan(experience).any():
+        if not np.isnan(obs).any():
 
-            entry = self.tableIndex(experience)
+            entry = self.tableIndex(obs)
 
             action = np.argmax(self.QTable[entry, :])
 
@@ -228,10 +214,10 @@ class DQN(QLearner):
         self.model = self.model(self.ninput*self.nframes, self.nhidden, self.noutput)
 
         # target model is copy of defined model
-        self.target_model = copy.deepcopy(self.model)
+        self.model_target = copy.deepcopy(self.model)
 
-        # update rate of target model: target_model = tau * model + (1 - tau) * target_model
-        self.tau = 0.01
+        # update rate of model target: model_target = tau * model + (1 - tau) * model_target
+        self.tau = 10**-2
 
         # SGD optimizer
         # self.optimizer = optimizers.Adam(alpha=0.0001, beta1=0.5)
@@ -248,13 +234,13 @@ class DQN(QLearner):
 
         obs,act,reward,obs2,done = self.getBuffer(self.nreplay)
 
-        if not np.isnan(obs).any() and not obs.size == 0:
+        if not np.isnan(obs).any():
 
             # Soft updating of target model
             model_params = dict(self.model.namedparams())
-            target_model_params = dict(self.target_model.namedparams())
-            for i in target_model_params:
-                target_model_params[i].data = self.tau * model_params[i].data + (1 - self.tau) * target_model_params[i].data
+            model_target_params = dict(self.model_target.namedparams())
+            for i in model_target_params:
+                model_target_params[i].data = self.tau * model_params[i].data + (1 - self.tau) * model_target_params[i].data
 
             # Gradient-based update
             self.optimizer.zero_grads()
@@ -280,7 +266,7 @@ class DQN(QLearner):
 
         # Compute q values based on next obs
         s2 = Variable(obs2) # obs2.reshape([self.nreplay,self.nframes,self.ninput]))
-        Q2 = self.target_model(s2)
+        Q2 = self.model_target(s2)
 
         # Get actions that produce maximal q value
         maxQ2 = np.max(Q2.data,1)
@@ -292,21 +278,27 @@ class DQN(QLearner):
 
             # NOTE: DQN_AGENT_NATURE uses the sign of the reward; not the reward itself as in standard Q learning!
             # Can be problematic for certain environments that e.g. only have positive rewards
+            # NOTE 2: IF WE USE THIS IN TABULARQLEARNING IT ALSO FAILS; I.E. WHAT ARE THE CONSTRAINTS TO MAKE THIS WORK?
+            # if not done[i]:
+            #     target[i, action[i]] = np.sign(reward[i]) + self.gamma * maxQ2[i]
+            # else:
+            #     target[i, action[i]] = np.sign(reward[i])
+
             if not done[i]:
-                target[i, action[i]] = np.sign(reward[i]) + self.gamma * maxQ2[i]
+                target[i, action[i]] = reward[i] + self.gamma * maxQ2[i]
             else:
-                target[i, action[i]] = np.sign(reward[i])
+                target[i, action[i]] = reward[i]
 
         # Compute temporal difference error
         td_error = Variable(target) - Q1
 
         # Perform TD-error clipping
-        td_tmp = td_error.data + 1000.0 * (abs(td_error.data) <= 1)  # Avoid zero division
-        td_clip = td_error * (abs(td_error.data) <= 1) + td_error/abs(td_tmp) * (abs(td_error.data) > 1)
+        # td_tmp = td_error.data + 1000.0 * (abs(td_error.data) <= 1)  # Avoid zero division
+        # td_clip = td_error * (abs(td_error.data) <= 1) + td_error/abs(td_tmp) * (abs(td_error.data) > 1)
 
         # Compute MSE of the error against zero
         zero_val = Variable(np.zeros((obs.shape[0], self.noutput), dtype=np.float32))
-        loss = F.mean_squared_error(td_clip, zero_val)
+        loss = F.mean_squared_error(td_error, zero_val)
 
         return loss
 
@@ -318,15 +310,20 @@ class DQN(QLearner):
         :return: action
         """
 
+        if self.obs.full:
+            nitems = self.nbuffer
+        else:
+            nitems = self.obs.offset + 1
+
         # get the nframes last observations
-        experience = getExperience(obs)
+        obs = np.vstack([self.obs.get(np.arange(nitems - self.nframes + 1, nitems)), obs])
 
         if self.verbose:
-            print 'input observation: {0}'.format(experience.flatten())
+            print 'input observation: {0}'.format(obs.flatten())
 
-        if not np.isnan(experience).any():
+        if not np.isnan(obs).any():
 
-            Q = self.model(Variable(experience.reshape([1,self.nframes,self.ninput]))).data
+            Q = self.model(Variable(obs.reshape([1,self.nframes,self.ninput]))).data
             action = np.argmax(Q)
 
         else:
@@ -334,3 +331,11 @@ class DQN(QLearner):
             action = np.random.randint(self.noutput)
 
         return action
+
+    def save(self):
+        """
+        Save networks
+        """
+
+        serializers.save_npz('model.model', self.model)
+        serializers.save_npz('model_target.model', self.model_target)
