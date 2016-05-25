@@ -7,6 +7,9 @@ import modelzoo
 from circularbuffer import CircularBuffer
 import matplotlib.pyplot as plt
 
+###
+# Base class for Q learning
+
 class QLearner(object):
     """
     Base class for any Q learning
@@ -106,6 +109,9 @@ class QLearner(object):
     def reset(self):
         pass
 
+###
+# Tabular Q learning
+
 class TabularQLearner(QLearner):
     """
     Tabular Q learning
@@ -195,6 +201,16 @@ class TabularQLearner(QLearner):
 
         return action
 
+    def save(self):
+        """
+        Save table; not yet implemented
+        """
+
+        pass
+
+###
+# deep Q learning
+
 class DQN(QLearner):
     """
     Implementation of the DQN model
@@ -245,6 +261,159 @@ class DQN(QLearner):
             # Gradient-based update
             self.optimizer.zero_grads()
             loss = self.forward(obs, act, reward, obs2, done)
+            loss.backward()
+            self.optimizer.update()
+
+            return loss.data
+
+        else:
+
+            return np.nan
+
+
+    def forward(self, obs, action, reward, obs2, done):
+        """
+        Compute loss after forward sweep
+        """
+
+        # Compute q values based on current obs
+        s = Variable(obs) # obs.reshape([self.nreplay,self.nframes,self.ninput]))
+        Q1 = self.model(s)
+
+        # Compute q values based on next obs
+        s2 = Variable(obs2) # obs2.reshape([self.nreplay,self.nframes,self.ninput]))
+        Q2 = self.model_target(s2)
+
+        # Get actions that produce maximal q value
+        maxQ2 = np.max(Q2.data,1)
+
+        # Compute target q values
+        target = np.copy(Q1.data)
+
+        for i in xrange(obs.shape[0]):
+
+            # NOTE: DQN_AGENT_NATURE uses the sign of the reward; not the reward itself as in standard Q learning!
+            # Can be problematic for certain environments that e.g. only have positive rewards
+            # NOTE 2: IF WE USE THIS IN TABULARQLEARNING IT ALSO FAILS; I.E. WHAT ARE THE CONSTRAINTS TO MAKE THIS WORK?
+            # if not done[i]:
+            #     target[i, action[i]] = np.sign(reward[i]) + self.gamma * maxQ2[i]
+            # else:
+            #     target[i, action[i]] = np.sign(reward[i])
+
+            if not done[i]:
+                target[i, action[i]] = reward[i] + self.gamma * maxQ2[i]
+            else:
+                target[i, action[i]] = reward[i]
+
+        # Compute temporal difference error
+        td_error = Variable(target) - Q1
+
+        # Perform TD-error clipping
+        # td_tmp = td_error.data + 1000.0 * (abs(td_error.data) <= 1)  # Avoid zero division
+        # td_clip = td_error * (abs(td_error.data) <= 1) + td_error/abs(td_tmp) * (abs(td_error.data) > 1)
+
+        # Compute MSE of the error against zero
+        zero_val = Variable(np.zeros((obs.shape[0], self.noutput), dtype=np.float32))
+        loss = F.mean_squared_error(td_error, zero_val)
+
+        return loss
+
+    def greedy_action(self, obs):
+        """
+        Greedy action, returns best action according to the Q learner
+
+        :param obs:
+        :return: action
+        """
+
+        if self.obs.full:
+            nitems = self.nbuffer
+        else:
+            nitems = self.obs.offset + 1
+
+        # get the nframes last observations
+        obs = np.vstack([self.obs.get(np.arange(nitems - self.nframes + 1, nitems)), obs])
+
+        if self.verbose:
+            print 'input observation: {0}'.format(obs.flatten())
+
+        if not np.isnan(obs).any():
+
+            Q = self.model(Variable(obs.reshape([1,self.nframes,self.ninput]))).data
+            action = np.argmax(Q)
+
+        else:
+
+            action = np.random.randint(self.noutput)
+
+        return action
+
+    def save(self):
+        """
+        Save networks
+        """
+
+        serializers.save_npz('model.model', self.model)
+        serializers.save_npz('model_target.model', self.model_target)
+
+###
+# Deep recurrent Q learning
+
+class DRQN(QLearner):
+    """
+    Implementation of the DRQN model
+    """
+
+    def __init__(self, ninput, noutput, **kwargs):
+        super(DRQN, self).__init__(ninput, noutput, **kwargs)
+
+        # number of experiences to replay (batch size)
+        self.nreplay = kwargs.get('nreplay', np.min([self.nbuffer-self.nframes+1, 32]))
+
+        # define number of hidden units
+        self.nhidden = kwargs.get('nhidden',20)
+
+        # define neural network
+        self.model = kwargs.get('model', modelzoo.RNN)
+        self.model = self.model(self.ninput, self.nhidden, self.noutput)
+
+        # target model is copy of defined model
+        self.model_target = copy.deepcopy(self.model)
+
+        # update rate of model target: model_target = tau * model + (1 - tau) * model_target
+        self.tau = 10**-2
+
+        # SGD optimizer
+        # self.optimizer = optimizers.Adam(alpha=0.0001, beta1=0.5)
+        self.optimizer = optimizers.RMSpropGraves(lr=0.00025, alpha=0.95, momentum=0.95, eps=0.01)
+        self.optimizer.setup(self.model)
+
+    def learn(self):
+        """
+        Replay experience (batch) and perform backpropagation.
+
+        Output:
+        loss : TD error loss
+        """
+
+        obs,act,reward,obs2,done = self.getBuffer(self.nreplay)
+
+        if not np.isnan(obs).any():
+
+            # Soft updating of target model
+            model_params = dict(self.model.namedparams())
+            model_target_params = dict(self.model_target.namedparams())
+            for i in model_target_params:
+                model_target_params[i].data = self.tau * model_params[i].data + (1 - self.tau) * model_target_params[i].data
+
+            # We don't reset the RNNs since we want them to generalize from arbitrary initial states
+
+            # Gradient-based update
+            self.optimizer.zero_grads()
+
+            for i in xrange(self.nframes):
+                loss += self.forward(obs, act, reward, obs2, done)
+
             loss.backward()
             self.optimizer.update()
 
