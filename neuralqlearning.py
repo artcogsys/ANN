@@ -309,6 +309,7 @@ class DQN(QLearner):
         td_error = Variable(target) - Q1
 
         # Perform TD-error clipping
+        # It seems to be essential to remove this!
         # td_tmp = td_error.data + 1000.0 * (abs(td_error.data) <= 1)  # Avoid zero division
         # td_clip = td_error * (abs(td_error.data) <= 1) + td_error/abs(td_tmp) * (abs(td_error.data) > 1)
 
@@ -411,8 +412,12 @@ class DRQN(QLearner):
             # Gradient-based update
             self.optimizer.zero_grads()
 
-            for i in xrange(self.nframes):
-                loss += self.forward(obs, act, reward, obs2, done)
+            # take RNN steps until we arrive at the last observation
+            for i in xrange(self.nframes-1):
+                self.model(obs[:,i,:])
+                self.target_model(obs[:, i, :])
+
+            loss = self.forward(obs[:,self.nframes-1:self.nframes,:], act, reward, obs2[:,self.nframes-1:self.nframes,:], done)
 
             loss.backward()
             self.optimizer.update()
@@ -445,14 +450,6 @@ class DRQN(QLearner):
 
         for i in xrange(obs.shape[0]):
 
-            # NOTE: DQN_AGENT_NATURE uses the sign of the reward; not the reward itself as in standard Q learning!
-            # Can be problematic for certain environments that e.g. only have positive rewards
-            # NOTE 2: IF WE USE THIS IN TABULARQLEARNING IT ALSO FAILS; I.E. WHAT ARE THE CONSTRAINTS TO MAKE THIS WORK?
-            # if not done[i]:
-            #     target[i, action[i]] = np.sign(reward[i]) + self.gamma * maxQ2[i]
-            # else:
-            #     target[i, action[i]] = np.sign(reward[i])
-
             if not done[i]:
                 target[i, action[i]] = reward[i] + self.gamma * maxQ2[i]
             else:
@@ -460,10 +457,6 @@ class DRQN(QLearner):
 
         # Compute temporal difference error
         td_error = Variable(target) - Q1
-
-        # Perform TD-error clipping
-        # td_tmp = td_error.data + 1000.0 * (abs(td_error.data) <= 1)  # Avoid zero division
-        # td_clip = td_error * (abs(td_error.data) <= 1) + td_error/abs(td_tmp) * (abs(td_error.data) > 1)
 
         # Compute MSE of the error against zero
         zero_val = Variable(np.zeros((obs.shape[0], self.noutput), dtype=np.float32))
