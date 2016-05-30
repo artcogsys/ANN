@@ -87,10 +87,7 @@ class QLearner(object):
 
         Input:
         epsilon: Probability of random action
-        :return: action and Q value (either chainer variable or numpy array)
         """
-
-        Q = self.getQ(obs)
 
         if np.random.rand() < epsilon:
 
@@ -101,18 +98,13 @@ class QLearner(object):
 
         else:
 
-            if Q is None:
-                action = np.random.randint(self.noutput)
-            elif type(Q) is Variable:
-                action = np.argmax(Q.data)
-            else:
-                action = np.argmax(Q)
+            action = self.greedy_action(obs)
 
             # analyseer actie lijst; makes sense? Waarom werkt het wel bij nframes=2 voor tabularq???
             if self.verbose:
                 print 'greedy action: {0}'.format(action)
 
-        return action, Q
+        return action
 
     def reset(self):
         pass
@@ -184,12 +176,12 @@ class TabularQLearner(QLearner):
         else:
             return np.nan
 
-    def getQ(self, obs):
+    def greedy_action(self, obs):
         """
-        Get Q value for all actions
+        Greedy action, returns best action according to the Q learner
 
         :param obs:
-        :return: Q
+        :return: action
         """
 
         obs = np.vstack([self.obs.get(np.arange(1, self.nframes)), obs])
@@ -200,10 +192,14 @@ class TabularQLearner(QLearner):
         if not np.isnan(obs).any():
 
             entry = self.tableIndex(obs)
-            return self.QTable[entry, :]
+
+            action = np.argmax(self.QTable[entry, :])
 
         else:
-            return None
+
+            action = np.random.randint(self.noutput)
+
+        return action
 
     def save(self):
         """
@@ -323,32 +319,35 @@ class DQN(QLearner):
 
         return loss
 
-    def getQ(self, obs):
+    def greedy_action(self, obs):
         """
-        Get Q value for all actions
+        Greedy action, returns best action according to the Q learner
 
         :param obs:
-        :return: Q
+        :return: action
         """
 
-        if self.obs.offset is None:
-            return None
-
-        # get the nframes last observations
         if self.obs.full:
             nitems = self.nbuffer
         else:
             nitems = self.obs.offset + 1
 
+        # get the nframes last observations
         obs = np.vstack([self.obs.get(np.arange(nitems - self.nframes + 1, nitems)), obs])
 
         if self.verbose:
             print 'input observation: {0}'.format(obs.flatten())
 
         if not np.isnan(obs).any():
-            return self.model(Variable(obs.reshape([1,self.nframes,self.ninput]))).data
+
+            Q = self.model(Variable(obs.reshape([1,self.nframes,self.ninput]))).data
+            action = np.argmax(Q)
+
         else:
-            return None
+
+            action = np.random.randint(self.noutput)
+
+        return action
 
     def save(self):
         """
@@ -363,13 +362,14 @@ class DQN(QLearner):
 
 class DRQN(QLearner):
     """
-    Implementation of the DRQN model:
-    VANILLA IMPLEMENTATION WHICH LEARNS DIRECTLY ON THE CURRENT STATE
-    DRQN MIGHT REQUIRE ALL DQN TRICKS IN ORDER TO MAKE IT WORK BETTER...
+    Implementation of the DRQN model
     """
 
     def __init__(self, ninput, noutput, **kwargs):
         super(DRQN, self).__init__(ninput, noutput, **kwargs)
+
+        # number of experiences to replay (batch size)
+        self.nreplay = kwargs.get('nreplay', np.min([self.nbuffer-self.nframes+1, 32]))
 
         # define number of hidden units
         self.nhidden = kwargs.get('nhidden',20)
@@ -378,18 +378,18 @@ class DRQN(QLearner):
         self.model = kwargs.get('model', modelzoo.RNN)
         self.model = self.model(self.ninput, self.nhidden, self.noutput)
 
-         # counter to determine truncated backprop
-        self.count = 0
+        # target model is copy of defined model
+        self.model_target = copy.deepcopy(self.model)
 
-        # maintain loss
-        self.loss = 0
+        # update rate of model target: model_target = tau * model + (1 - tau) * model_target
+        self.tau = 10**-2
 
         # SGD optimizer
         # self.optimizer = optimizers.Adam(alpha=0.0001, beta1=0.5)
         self.optimizer = optimizers.RMSpropGraves(lr=0.00025, alpha=0.95, momentum=0.95, eps=0.01)
         self.optimizer.setup(self.model)
 
-    def learn(self, Q1, Q2, action, reward, done):
+    def learn(self):
         """
         Replay experience (batch) and perform backpropagation.
 
@@ -397,42 +397,113 @@ class DRQN(QLearner):
         loss : TD error loss
         """
 
+        obs,act,reward,obs2,done = self.getBuffer(self.nreplay)
+
+        # second condition required since otherwise parallel RNN size changes if we don't explicitly reset
+        # and obs.shape[0] == self.nreplay:
+        if not np.isnan(obs).any():
+
+            # Store internal state parameters
+            _c = self.model.l1.c
+            _h = self.model.l1.h
+
+            # Soft updating of target model
+            model_params = dict(self.model.namedparams())
+            model_target_params = dict(self.model_target.namedparams())
+            for i in model_target_params:
+                model_target_params[i].data = self.tau * model_params[i].data + (1 - self.tau) * model_target_params[i].data
+
+            # Very suboptimal but needed since acting RNN has size 1 x nvariables and learning RNN has size nreplay x nvariables
+            # Most beautiful would be an RNN which just trains on the ongoing experience... I.e. no replay buffer
+            self.model.reset()
+            self.model_target.reset()
+
+            # Gradient-based update
+            self.optimizer.zero_grads()
+
+            # take RNN steps until we arrive at the final observation
+            for i in xrange(self.nframes-1):
+                self.model(Variable(obs[:,i:i+1,:]))
+                self.model_target(Variable(obs[:, i:i+1, :]))
+            self.model_target(Variable(obs[:, self.nframes-1:self.nframes, :]))
+
+            loss = self.forward(obs[:,self.nframes-1:self.nframes,:], act, reward, obs2[:,self.nframes-1:self.nframes,:], done)
+
+            loss.backward()
+            self.optimizer.update()
+
+            # Restore internal state parameters
+            self.model.l1.c = _c
+            self.model.l1.h = _h
+
+            return loss.data
+
+        else:
+
+            return np.nan
+
+
+    def forward(self, obs, action, reward, obs2, done):
+        """
+        Compute loss after forward sweep
+        """
+
+        # Compute q values based on current obs
+        s = Variable(obs) # obs.reshape([self.nreplay,self.nframes,self.ninput]))
+        Q1 = self.model(s)
+
+        # Compute q values based on next obs
+        s2 = Variable(obs2) # obs2.reshape([self.nreplay,self.nframes,self.ninput]))
+        Q2 = self.model_target(s2)
+
         # Get actions that produce maximal q value
-        maxQ2 = np.max(Q2.data, 1)
+        maxQ2 = np.max(Q2.data,1)
 
         # Compute target q values
         target = np.copy(Q1.data)
-        if not done:
-            target[0,action] = reward + self.gamma * maxQ2
-        else:
-            target[0,action] = reward
 
-        self.loss += F.mean_squared_error(Variable(target), Q1)
-        self.count += 1
-        if self.count % 10 == 0:
-            self.optimizer.zero_grads()
-            self.loss.backward()
-            self.loss.unchain_backward()
-            self.optimizer.update()
+        for i in xrange(obs.shape[0]):
 
-        return self.loss.data
+            if not done[i]:
+                target[i, action[i]] = reward[i] + self.gamma * maxQ2[i]
+            else:
+                target[i, action[i]] = reward[i]
 
+        # Compute temporal difference error
+        td_error = Variable(target) - Q1
 
-    def getQ(self, obs):
+        # Compute MSE of the error against zero
+        zero_val = Variable(np.zeros((obs.shape[0], self.noutput), dtype=np.float32))
+        loss = F.mean_squared_error(td_error, zero_val)
+
+        return loss
+
+    def greedy_action(self, obs):
         """
-        Get Q value for all actions
+        Greedy action, returns best action according to the Q learner
 
         :param obs:
-        :return: Q
+        :return: action
         """
+
+        if self.obs.full:
+            nitems = self.nbuffer
+        else:
+            nitems = self.obs.offset + 1
 
         if self.verbose:
             print 'input observation: {0}'.format(obs)
 
         if not np.isnan(obs).any():
-            return self.model(Variable(obs))
+
+            Q = self.model(Variable(obs)).data
+            action = np.argmax(Q)
+
         else:
-            return None
+
+            action = np.random.randint(self.noutput)
+
+        return action
 
     def save(self):
         """
@@ -440,10 +511,4 @@ class DRQN(QLearner):
         """
 
         serializers.save_npz('model.model', self.model)
-
-    def reset(self):
-        """
-        Reset LSTM state
-        """
-
-        self.model.reset()
+        serializers.save_npz('model_target.model', self.model_target)
