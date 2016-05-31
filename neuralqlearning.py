@@ -258,7 +258,6 @@ class DQN(QLearner):
         loss : TD error loss
         """
 
-        # CHECK THIS; DO WE WANT TO GET RID OF GETBUFFER?
         obs,action,reward,obs2,done = self.getBuffer(self.nreplay)
 
         if obs.size:
