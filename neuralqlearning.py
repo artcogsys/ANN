@@ -4,7 +4,7 @@ import chainer.functions as F
 import chainer.links as L
 import copy
 import modelzoo
-from circularbuffer import CircularBuffer
+from ringbuffer import RingBuffer
 import matplotlib.pyplot as plt
 
 ###
@@ -37,11 +37,11 @@ class QLearner(object):
         self.verbose = kwargs.get('verbose', True)
 
         # initialize replay memory (not the most efficient but definitely the cleanest way)
-        self.obs = CircularBuffer(self.nbuffer, self.ninput, np.float32)
-        self.action = CircularBuffer(self.nbuffer, 1, np.uint8)
-        self.reward = CircularBuffer(self.nbuffer, 1, np.float32)
-        self.obs2 = CircularBuffer(self.nbuffer, self.ninput, np.float32)
-        self.done = CircularBuffer(self.nbuffer, 1, np.bool)
+        self.obs = RingBuffer(self.nbuffer, self.ninput, np.float32)
+        self.action = RingBuffer(self.nbuffer, 1, np.uint8)
+        self.reward = RingBuffer(self.nbuffer, 1, np.float32)
+        self.obs2 = RingBuffer(self.nbuffer, self.ninput, np.float32)
+        self.done = RingBuffer(self.nbuffer, 1, np.bool)
 
     def addBuffer(self, _obs, _action, _reward, _obs2, _done):
         """
@@ -56,30 +56,28 @@ class QLearner(object):
         """
 
         # Store experience
-        self.obs.put(_obs)
-        self.action.put(_action)
-        self.reward.put(_reward)
-        self.obs2.put(_obs2)
-        self.done.put(_done)
+        self.obs.append(_obs)
+        self.action.append(_action)
+        self.reward.append(_reward)
+        self.obs2.append(_obs2)
+        self.done.append(_done)
 
-    def getBuffer(self, _nreplay=1):
+    def getBuffer(self, n=1):
         """
-        Get nreplay random experiences from the buffer
+        Get n random experiences from the buffer
         """
 
         # Select random examples in the buffer
-        if self.obs.full:
-            nitems = self.nbuffer
-        else:
-            nitems = self.obs.offset+1
+        idx = np.arange(0,self.obs.size())
 
-        idx = np.random.permutation(np.arange(self.nframes - 1, nitems))[0:_nreplay]
+        # Select at most k indices while taking number of frames into account
+        idx = np.random.permutation(idx[self.nframes - 1:])[0:n]
 
-        # get all frames to build multiple frame observation
-        # shape is nreplay x nframes
-        fidx = np.array(map(lambda x: x - np.arange(self.nframes-1,-1,-1), idx))
-
-        return self.obs.get(fidx), self.action.get(idx), self.reward.get(idx), self.obs2.get(fidx), self.done.get(idx)
+        return self.obs.getByIdx(idx, self.nframes), \
+               self.action.getByIdx(idx), \
+               self.reward.getByIdx(idx), \
+               self.obs2.getByIdx(idx, self.nframes), \
+               self.done.getByIdx(idx)
 
     def act(self, obs, epsilon=0.1):
         """"
@@ -156,9 +154,14 @@ class TabularQLearner(QLearner):
 
     def learn(self):
 
-        obs, action, reward, obs2, done = self.getBuffer()
+        obs = self.obs.get(self.nframes)
 
-        if not np.isnan(obs).any():
+        if obs.size: # if not empty
+
+            action = self.action.get(1)
+            reward = self.reward.get(1)
+            obs2 = self.obs2.get(self.nframes)
+            done = self.done.get(1)
 
             # Compute q values based on current obs
             q1idx = self.tableIndex(obs)
@@ -192,14 +195,17 @@ class TabularQLearner(QLearner):
         :return: Q
         """
 
-        obs = np.vstack([self.obs.get(np.arange(1, self.nframes)), obs])
+        history = self.obs.get(self.nframes-1)
 
-        if self.verbose:
-            print 'input observation: {0}'.format(obs.flatten())
+        if history.size:
 
-        if not np.isnan(obs).any():
+            obs = np.vstack([history, obs])
+
+            if self.verbose:
+                print 'input observation: {0}'.format(obs.flatten())
 
             entry = self.tableIndex(obs)
+
             return self.QTable[entry, :]
 
         else:
@@ -252,9 +258,10 @@ class DQN(QLearner):
         loss : TD error loss
         """
 
+        # CHECK THIS; DO WE WANT TO GET RID OF GETBUFFER?
         obs,action,reward,obs2,done = self.getBuffer(self.nreplay)
 
-        if not np.isnan(obs).any():
+        if obs.size:
 
             # Soft updating of target model
             model_params = dict(self.model.namedparams())
@@ -311,21 +318,15 @@ class DQN(QLearner):
         :return: Q
         """
 
-        if self.obs.offset is None:
-            return None
+        history = self.obs.get(self.nframes - 1)
 
-        # get the nframes last observations
-        if self.obs.full:
-            nitems = self.nbuffer
-        else:
-            nitems = self.obs.offset + 1
+        if history.size:
 
-        obs = np.vstack([self.obs.get(np.arange(nitems - self.nframes + 1, nitems)), obs])
+            obs = np.vstack([history, obs])
 
-        if self.verbose:
-            print 'input observation: {0}'.format(obs.flatten())
+            if self.verbose:
+                print 'input observation: {0}'.format(obs.flatten())
 
-        if not np.isnan(obs).any():
             return self.model(Variable(obs.reshape([1,self.nframes,self.ninput]))).data
         else:
             return None
