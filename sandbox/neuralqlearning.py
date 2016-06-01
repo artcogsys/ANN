@@ -64,8 +64,7 @@ class QLearner(object):
 
     def getBuffer(self, n=1):
         """
-        Get n random experiences of length nframes from the buffer
-        :param n: Number of experiences to retrieve
+        Get n random experiences from the buffer
         """
 
         # Select random examples in the buffer
@@ -293,6 +292,11 @@ class DQN(QLearner):
                 else:
                     target[i, action[i]] = reward[i]
 
+            # # Compute temporal difference error
+            # td_error = Variable(target) - Q1
+            #
+            # # Compute MSE of the error against zero
+            # zero_val = Variable(np.zeros((obs.shape[0], self.noutput), dtype=np.float32))
             loss = F.mean_squared_error(Variable(target), Q1)
 
             loss.backward()
@@ -339,37 +343,33 @@ class DQN(QLearner):
 
 class DRQN(QLearner):
     """
-    Implementation of the DRQN model
+    Implementation of the DRQN model:
+    VANILLA IMPLEMENTATION WHICH LEARNS DIRECTLY ON THE CURRENT STATE
+    DRQN MIGHT REQUIRE ALL DQN TRICKS IN ORDER TO MAKE IT WORK BETTER...
     """
 
     def __init__(self, ninput, noutput, **kwargs):
         super(DRQN, self).__init__(ninput, noutput, **kwargs)
 
-        # number of experiences to replay (batch size)
-        self.nreplay = kwargs.get('nreplay', np.min([self.nbuffer-self.nframes+1, 32]))
-
         # define number of hidden units
         self.nhidden = kwargs.get('nhidden',20)
 
         # define neural network
-        self.model = kwargs.get('model',modelzoo.RNN)
+        self.model = kwargs.get('model', modelzoo.RNN)
         self.model = self.model(self.ninput, self.nhidden, self.noutput)
 
-        # target model is copy of defined model
-        self.model_target = copy.deepcopy(self.model)
+         # counter to determine truncated backprop
+        self.count = 0
 
-        # update rate of model target: model_target = tau * model + (1 - tau) * model_target
-        self.tau = 10**-2
+        # maintain loss
+        self.loss = 0
 
         # SGD optimizer
         # self.optimizer = optimizers.Adam(alpha=0.0001, beta1=0.5)
         self.optimizer = optimizers.RMSpropGraves(lr=0.00025, alpha=0.95, momentum=0.95, eps=0.01)
         self.optimizer.setup(self.model)
 
-        # Count number of training iterations for backward unchaining
-        self.count = 0
-
-    def learn(self):
+    def learn(self, Q1, Q2, action, reward, done):
         """
         Replay experience (batch) and perform backpropagation.
 
@@ -377,62 +377,25 @@ class DRQN(QLearner):
         loss : TD error loss
         """
 
-        obs,action,reward,obs2,done = self.getBuffer(self.nreplay)
+        # Get actions that produce maximal q value
+        maxQ2 = np.max(Q2.data, 1)
 
-        if obs.size:
+        # Compute target q values
+        target = np.copy(Q1.data)
+        if not done:
+            target[0,action] = reward + self.gamma * maxQ2
+        else:
+            target[0,action] = reward
 
-            # Store internal state parameters
-            _c = self.model.l1.c
-            _h = self.model.l1.h
-
-            # Soft updating of target model
-            model_params = dict(self.model.namedparams())
-            model_target_params = dict(self.model_target.namedparams())
-            for i in model_target_params:
-                model_target_params[i].data = self.tau * model_params[i].data + (1 - self.tau) * model_target_params[i].data
-
-            # Reset states
-            self.model.reset()
-            self.model_target.reset()
-
+        self.loss += F.mean_squared_error(Variable(target), Q1)
+        self.count += 1
+        if self.count % 10 == 0:
             self.optimizer.zero_grads()
-
-            # take RNN steps
-            for i in xrange(self.nframes):
-                Q1 = self.model(Variable(obs[:, i:i + 1, :]))
-                self.model_target(Variable(obs[:, i:i + 1, :]))
-            Q2 = self.model_target(Variable(obs2[:, (self.nframes-1):self.nframes, :]))
-
-            # Get actions that produce maximal q value
-            maxQ2 = np.max(Q2.data, 1)
-
-            # Compute target q values
-            target = np.copy(Q1.data)
-            for i in xrange(obs.shape[0]):
-
-                if not done[i]:
-                    target[i, action[i]] = reward[i] + self.gamma * maxQ2[i]
-                else:
-                    target[i, action[i]] = reward[i]
-
-            # Compute temporal difference error
-            td_error = Variable(target) - Q1
-
-            # Compute MSE of the error against zero
-            loss = F.mean_squared_error(Variable(target), Q1)
-
-            loss.backward()
+            self.loss.backward()
+            self.loss.unchain_backward()
             self.optimizer.update()
 
-            # Restore internal state parameters
-            self.model.l1.c = _c
-            self.model.l1.h = _h
-
-            return loss.data
-
-        else:
-
-            return np.nan
+        return self.loss.data
 
 
     def getQ(self, obs):
@@ -444,9 +407,12 @@ class DRQN(QLearner):
         """
 
         if self.verbose:
-            print 'input observation: {0}'.format(obs.flatten())
+            print 'input observation: {0}'.format(obs)
 
-        return self.model(Variable(obs)).data
+        if not np.isnan(obs).any():
+            return self.model(Variable(obs))
+        else:
+            return None
 
     def save(self):
         """
@@ -454,4 +420,10 @@ class DRQN(QLearner):
         """
 
         serializers.save_npz('model.model', self.model)
-        serializers.save_npz('model_target.model', self.model_target)
+
+    def reset(self):
+        """
+        Reset LSTM state
+        """
+
+        self.model.reset()
