@@ -391,35 +391,64 @@ class DRQN(QLearner):
             for i in model_target_params:
                 model_target_params[i].data = self.tau * model_params[i].data + (1 - self.tau) * model_target_params[i].data
 
-            # Reset states
+            # Reset states (not needed since the resets don't do anything now; might actually even be better)
             self.model.reset()
             self.model_target.reset()
 
             self.optimizer.zero_grads()
 
+            # # take RNN steps
+            # for i in xrange(self.nframes):
+            #     Q1 = self.model(Variable(obs[:, i:i + 1, :]))
+            #     self.model_target(Variable(obs[:, i:i + 1, :]))
+            # Q2 = self.model_target(Variable(obs2[:, (self.nframes-1):self.nframes, :]))
+            #
+            # # Get actions that produce maximal q value
+            # maxQ2 = np.max(Q2.data, 1)
+            #
+            # # Compute target q values
+            # target = np.copy(Q1.data)
+            # for i in xrange(obs.shape[0]):
+            #
+            #     if not done[i]:
+            #         target[i, action[i]] = reward[i] + self.gamma * maxQ2[i]
+            #     else:
+            #         target[i, action[i]] = reward[i]
+            #
+            # # Compute temporal difference error
+            # td_error = Variable(target) - Q1
+            #
+            # # Compute MSE of the error against zero
+            # loss = F.mean_squared_error(Variable(target), Q1)
+
+            loss = 0
+
+            # take initial observation step for target model
+            self.model_target(Variable(obs[:, 0:1, :]))
+
             # take RNN steps
             for i in xrange(self.nframes):
+
                 Q1 = self.model(Variable(obs[:, i:i + 1, :]))
-                self.model_target(Variable(obs[:, i:i + 1, :]))
-            Q2 = self.model_target(Variable(obs2[:, (self.nframes-1):self.nframes, :]))
+                Q2 = self.model_target(Variable(obs2[:, i:i + 1, :]))
 
-            # Get actions that produce maximal q value
-            maxQ2 = np.max(Q2.data, 1)
+                # Get actions that produce maximal q value
+                maxQ2 = np.max(Q2.data, 1)
 
-            # Compute target q values
-            target = np.copy(Q1.data)
-            for i in xrange(obs.shape[0]):
+                # Compute target q values
+                target = np.copy(Q1.data)
+                for i in xrange(obs.shape[0]):
 
-                if not done[i]:
-                    target[i, action[i]] = reward[i] + self.gamma * maxQ2[i]
-                else:
-                    target[i, action[i]] = reward[i]
+                    if not done[i]:
+                        target[i, action[i]] = reward[i] + self.gamma * maxQ2[i]
+                    else:
+                        target[i, action[i]] = reward[i]
 
-            # Compute temporal difference error
-            td_error = Variable(target) - Q1
+                # Compute temporal difference error
+                td_error = Variable(target) - Q1
 
-            # Compute MSE of the error against zero
-            loss = F.mean_squared_error(Variable(target), Q1)
+                # Compute MSE of the error against zero
+                loss += F.mean_squared_error(Variable(target), Q1)
 
             loss.backward()
             self.optimizer.update()
