@@ -114,7 +114,7 @@ class RecurrentNeuralNetwork(object):
         
         for step in xrange(steps):
             x = Variable(self.xp.asarray([X[(seq * steps + step) % len(X)] for seq in xrange(seqs)]), True)
-            t = Variable(self.xp.asarray([T[(seq * steps + step + 1) % len(T)] for seq in xrange(seqs)]), True)
+            t = Variable(self.xp.asarray([T[(seq * steps + step) % len(T)] for seq in xrange(seqs)]), True)
             loss += model(x, t)
         
         loss = float(loss.data / steps)
@@ -130,7 +130,7 @@ class RecurrentNeuralNetwork(object):
         
         for step in xrange(steps):
             x = Variable(self.xp.asarray([X[(seq * steps + step) % len(X)] for seq in xrange(seqs)]))
-            t = Variable(self.xp.asarray([T[(seq * steps + step + 1) % len(T)] for seq in xrange(seqs)]))
+            t = Variable(self.xp.asarray([T[(seq * steps + step) % len(T)] for seq in xrange(seqs)]))
             loss += self.model(x, t)
             
             if (step + 1) % cutoff == 0 or (step + 1) == steps:
