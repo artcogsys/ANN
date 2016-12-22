@@ -2,17 +2,16 @@ import numpy as np
 from chainer import training
 from chainer import datasets, iterators, optimizers
 from chainer.training import extensions
-import chainer.links as L
-from modelzoo import MLP
+from chainer.serializers import npz
 from modelzoo import *
 import matplotlib.pyplot as plt
 
 # Also see:
 # https://github.com/pfnet/chainer/blob/master/examples/mnist/train_mnist.py
 
-nepochs = 20
-nbatch = 100
-nhidden = 20
+nepochs = 20 # number of epochs
+nbatch = 100 # number of items per batch
+nhidden = 20 # number of hidden units
 
 # get train and validation data as TupleDatasets
 train, validation = datasets.get_mnist()
@@ -24,7 +23,8 @@ noutput = np.unique(train._datasets[1]).size
 train_iter = iterators.SerialIterator(train, batch_size=nbatch, repeat=True, shuffle=True)
 validation_iter = iterators.SerialIterator(validation, batch_size=nbatch, repeat=False, shuffle=False)
 
-model = L.Classifier(MLP(ninput, nhidden, noutput))
+# For classification, we use cross-entropy as the cost function
+model = L.Classifier(DNN(ninput, nhidden, noutput))
 
 optimizer = optimizers.Adam()
 optimizer.setup(model)
@@ -51,18 +51,20 @@ trainer.extend(extensions.PrintReport(
 # The "main" refers to the target link of the "main" optimizer.
 trainer.extend(extensions.dump_graph('main/loss'))
 
-# Take a snapshot at each epoch
-trainer.extend(extensions.snapshot(), trigger=(nepochs, 'epoch'))
+# Take a snapshot of the training object at the end; we probably don't care too much
+#trainer.extend(extensions.snapshot(), trigger=(nepochs, 'epoch'))
+
+# Take snapshot of model at each epoch
+trainer.extend(extensions.snapshot_object(model, 'model_{.updater.epoch}', trigger=(1, 'epoch')))
 
 # Print a progress bar to stdout
 # trainer.extend(extensions.ProgressBar())
 
 # run training
-trainer.run()
+#trainer.run()
 
 # read log file
 import json
-from pprint import pprint
 with open('result_feedforward/log') as data_file:
 
     data = json.load(data_file)
@@ -80,3 +82,18 @@ plt.subplot(122)
 plt.plot(range(len(accuracy)),accuracy)
 plt.title('accuracy')
 plt.show()
+
+# determine best model based on validation error
+idx = np.argmin(loss)
+
+# get snapshot of the best model
+npz.load_npz('result_feedforward/model_' + str(idx+1), model)
+
+# example of getting the weights and biases for a deep neural network
+W = {}
+b = {}
+for i in range(model.predictor.nlayer):
+
+    W[i] = model.predictor[0][i].W.data
+    b[i] = model.predictor[0][i].b.data
+
