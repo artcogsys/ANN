@@ -1,4 +1,5 @@
 from chainer import Chain, Variable, cuda, optimizers, serializers
+import chainer
 import chainer.functions as F
 import chainer.links as L
 import matplotlib.pyplot as plt
@@ -164,7 +165,7 @@ def callback(model, X, cutoff, epochs, seqs):
     plt.show()
     plt.close()
     
-    if not os.path.exists('model/{}/{}/'.format(model.experiment, model.optimizer.epoch)):
-        os.makedirs('model/{}/{}/'.format(model.experiment, model.optimizer.epoch))
-    
-    model.save('', 'model/{}/{}/'.format(model.experiment, model.optimizer.epoch))
+    # if not os.path.exists('model/{}/{}/'.format(model.experiment, model.optimizer.epoch)):
+    #     os.makedirs('model/{}/{}/'.format(model.experiment, model.optimizer.epoch))
+    # 
+    # model.save('', 'model/{}/{}/'.format(model.experiment, model.optimizer.epoch))
