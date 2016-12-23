@@ -21,5 +21,5 @@ class RNN(Chain):
         y  = self.l2(h1)
         return y
 
-    def reset(self):
+    def reset_state(self):
         self.l1.reset_state()
