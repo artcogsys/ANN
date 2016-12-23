@@ -161,7 +161,7 @@ def callback(model, X, cutoff, epochs, seqs):
     plt.plot(model.log[('training', 'throughput')], 'r', model.log[('validation', 'throughput')], 'g')
     plt.xlabel('epoch')
     plt.ylabel('throughput')
-    plt.tight_layout()
+    #plt.tight_layout()
     plt.show()
     plt.close()
     
