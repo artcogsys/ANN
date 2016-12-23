@@ -4,7 +4,7 @@ import numpy
 import random
 import recurrent_neural_network as r
 import matplotlib.pyplot as plt
-plt.ion()
+#plt.ion()
 
 ### Classification example ###
 
@@ -46,3 +46,16 @@ threshold = 5 # threshold for gradient clipping
 # Note: to use a model after optimization, the predict method should be used; train and test
 # methods are for internal use only.
 RNN.optimize(T, X, cutoff, epochs, seqs, callback, rate_lasso, rate_weight_decay, threshold)
+
+
+plt.figure()
+plt.subplot(121)
+plt.plot(RNN.log[('training', 'loss')], 'r', RNN.log[('validation', 'loss')], 'g')
+plt.xlabel('epoch')
+plt.ylabel('loss')
+plt.subplot(122)
+plt.plot(RNN.log[('training', 'throughput')], 'r', RNN.log[('validation', 'throughput')], 'g')
+plt.xlabel('epoch')
+plt.ylabel('throughput')
+#plt.tight_layout()
+plt.show()
