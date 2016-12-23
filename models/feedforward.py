@@ -26,6 +26,7 @@ class MLP(Chain):
         y = self.l2(h1)
         return y
 
+
 #####
 ## DNN
 

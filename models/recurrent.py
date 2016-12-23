@@ -16,9 +16,11 @@ class RNN(Chain):
             l2=L.Linear(nhidden, noutput)
         )
 
+        self.h = {}
+
     def __call__(self, x):
-        h1 = self.l1(x)
-        y  = self.l2(h1)
+        self.h[0] = self.l1(x)
+        y  = self.l2(self.h[0])
         return y
 
     def reset_state(self):
