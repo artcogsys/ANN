@@ -3,14 +3,12 @@ import numpy as np
 import pickle
 import time
 import tqdm
-import numpy as np
 
-class ArtificialNeuralNetwork(object):
+class SupervisedLearner(object):
 
     def __init__(self, optimizer, gpu=-1):
 
         self.model = optimizer.target
-#        self.network = optimizer.target.predictor
 
         self.optimizer = optimizer
 
@@ -81,89 +79,6 @@ class ArtificialNeuralNetwork(object):
         serializers.save_npz('{}model{}'.format(prefix, postfix), self.model)
 
 
-class FeedForwardNeuralNetwork(ArtificialNeuralNetwork):
-
-    def __init__(self, optimizer, gpu=-1):
-        super(FeedForwardNeuralNetwork, self).__init__(optimizer, gpu)
-
-
-    def train(self, X, T, batch_size, cutoff):
-
-        # check if we are in train or test mode (e.g. for dropout)
-        self.model.predictor.test = False
-        self.model.predictor.train = True
-
-        steps = len(X) // batch_size
-
-        perm = np.random.permutation(np.arange(len(X)))
-
-        for step in xrange(steps):
-
-            x = Variable(self.xp.asarray([X[perm[(seq * steps + step) % len(X)]] for seq in xrange(batch_size)]))
-            t = Variable(self.xp.asarray([T[perm[(seq * steps + step) % len(T)]] for seq in xrange(batch_size)]))
-
-            loss = self.model(x, t)
-
-            self.optimizer.zero_grads()
-            loss.backward()
-            self.optimizer.update()
-
-        return float(loss.data)
-
-
-    def test(self, X, T, batch_size):
-
-        loss = Variable(self.xp.zeros((), 'float32'), True)
-
-        model = self.model
-
-        # check if we are in train or test mode (e.g. for dropout)
-        model.predictor.test = True
-        model.predictor.train = False
-
-        steps = len(X) // batch_size
-
-        perm = np.random.permutation(np.arange(len(X)))
-
-        for step in xrange(steps):
-
-            x = Variable(self.xp.asarray([X[perm[(seq * steps + step) % len(X)]] for seq in xrange(batch_size)]), True)
-            t = Variable(self.xp.asarray([T[perm[(seq * steps + step) % len(T)]] for seq in xrange(batch_size)]), True)
-
-            loss += model(x, t)
-
-        return float(loss.data / steps)
-
-
-    def predict(self, X):
-
-        # check if we are in train or test mode (e.g. for dropout)
-        self.model.predictor.test = True
-        self.model.predictor.train = False
-
-        Y = []
-        for step in xrange(X.shape[0]):
-
-            x = Variable(self.xp.asarray(X[step][None]), True)
-            Y.append(self.model.predictor(x).data)
-
-            if step == 0:
-                H = [[self.model.predictor.h[i].data[0]] for i in xrange(len(self.model.predictor.h))]
-            else:
-                _ = [H[i].append(self.model.predictor.h[i].data[0]) for i in xrange(len(self.model.predictor.h))]
-
-        H = [self.xp.asarray(H[i]) for i in xrange(len(H))]
-        Y = np.squeeze(self.xp.asarray(Y))
-
-        return H, Y
-
-
-class RecurrentNeuralNetwork(ArtificialNeuralNetwork):
-
-    def __init__(self, optimizer, gpu=-1):
-        super(RecurrentNeuralNetwork, self).__init__(optimizer, gpu)
-
-
     def train(self, X, T, batch_size, cutoff):
 
         cumloss = self.xp.zeros((), 'float32')
@@ -176,32 +91,58 @@ class RecurrentNeuralNetwork(ArtificialNeuralNetwork):
 
         steps = len(X) // batch_size
 
-        for step in xrange(steps):
+        if self.model.predictor.type == 'feedforward':
 
-            x = Variable(self.xp.asarray([X[(seq * steps + step) % len(X)] for seq in xrange(batch_size)]))
-            t = Variable(self.xp.asarray([T[(seq * steps + step) % len(T)] for seq in xrange(batch_size)]))
+            # processing of random batches
+            perm = np.random.permutation(np.arange(len(X)))
+            for step in xrange(steps):
+                x = Variable(self.xp.asarray([X[perm[(seq * steps + step) % len(X)]] for seq in xrange(batch_size)]))
+                t = Variable(self.xp.asarray([T[perm[(seq * steps + step) % len(T)]] for seq in xrange(batch_size)]))
 
-            loss += self.model(x, t)
+                loss = self.model(x, t)
 
-            if (step + 1) % cutoff == 0 or (step + 1) == steps:
                 self.optimizer.zero_grads()
                 loss.backward()
-                loss.unchain_backward()
                 self.optimizer.update()
 
-                cumloss += loss.data
-                loss = Variable(self.xp.zeros((), 'float32'))
+            return float(loss.data)
 
-        return float(cumloss / steps)
+        elif self.model.predictor.type == 'recurrent':
+
+            # processing of sequences
+            for step in xrange(steps):
+
+                x = Variable(self.xp.asarray([X[(seq * steps + step) % len(X)] for seq in xrange(batch_size)]))
+                t = Variable(self.xp.asarray([T[(seq * steps + step) % len(T)] for seq in xrange(batch_size)]))
+
+                loss += self.model(x, t)
+
+                if (step + 1) % cutoff == 0 or (step + 1) == steps:
+                    self.optimizer.zero_grads()
+                    loss.backward()
+                    loss.unchain_backward()
+                    self.optimizer.update()
+
+                    cumloss += loss.data
+                    loss = Variable(self.xp.zeros((), 'float32'))
+
+            return float(cumloss / steps)
+
+        else:
+            raise ValueError('unknown type')
 
 
     def test(self, X, T, batch_size):
 
         loss = Variable(self.xp.zeros((), 'float32'), True)
 
-        model = self.model.copy()
-
-        model.predictor.reset_state()
+        if self.model.predictor.type == 'feedforward':
+            model = self.model
+        elif self.model.predictor.type == 'recurrent':
+            model = self.model.copy()
+            model.predictor.reset_state()
+        else:
+            raise ValueError('unknown type')
 
         # check if we are in train or test mode (e.g. for dropout)
         model.predictor.test = True
@@ -209,18 +150,33 @@ class RecurrentNeuralNetwork(ArtificialNeuralNetwork):
 
         steps = len(X) // batch_size
 
-        for step in xrange(steps):
-            x = Variable(self.xp.asarray([X[(seq * steps + step) % len(X)] for seq in xrange(batch_size)]), True)
-            t = Variable(self.xp.asarray([T[(seq * steps + step) % len(T)] for seq in xrange(batch_size)]), True)
+        if self.model.predictor.type == 'feedforward':
 
-            loss += model(x, t)
+            # processing of random batches
+            perm = np.random.permutation(np.arange(len(X)))
+            for step in xrange(steps):
+                x = Variable(self.xp.asarray([X[perm[(seq * steps + step) % len(X)]] for seq in xrange(batch_size)]),
+                             True)
+                t = Variable(self.xp.asarray([T[perm[(seq * steps + step) % len(T)]] for seq in xrange(batch_size)]),
+                             True)
+
+                loss += model(x, t)
+
+        elif self.model.predictor.type == 'recurrent':
+
+            # processing of sequences
+            for step in xrange(steps):
+                x = Variable(self.xp.asarray([X[(seq * steps + step) % len(X)] for seq in xrange(batch_size)]), True)
+                t = Variable(self.xp.asarray([T[(seq * steps + step) % len(T)] for seq in xrange(batch_size)]), True)
+
+                loss += model(x, t)
 
         return float(loss.data / steps)
 
-
     def predict(self, X):
 
-        self.model.predictor.reset_state()
+        if self.model.predictor.type == 'recurrent':
+            self.model.predictor.reset_state()
 
         # check if we are in train or test mode (e.g. for dropout)
         self.model.predictor.test = True
@@ -241,8 +197,3 @@ class RecurrentNeuralNetwork(ArtificialNeuralNetwork):
         Y = np.squeeze(self.xp.asarray(Y))
 
         return Y, H
-
-
-
-
-

@@ -18,6 +18,8 @@ class RNN(Chain):
 
         self.h = {}
 
+        self.type = 'recurrent'
+
     def __call__(self, x):
         self.h[0] = self.l1(x)
         y  = self.l2(self.h[0])

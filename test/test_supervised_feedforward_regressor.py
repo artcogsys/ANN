@@ -1,30 +1,29 @@
 import chainer
-import chainer.links as L
 import matplotlib.pyplot as plt
 
 from environment import datasets
-from models import recurrent
+from models import feedforward
 from paradigms import supervised
-from analysis import connectivity
+from paradigms.utilities import Regressor
+from analysis import basic
 
 # get data
-[X, T, nin, nout] = datasets.get_random_timeseries()
+[X, T, nin, nout] = datasets.get_supervised_feedforward_regression_data()
 
 # define model
-model = L.Classifier(recurrent.RNN(nin, 10, nout))
+model = Regressor(feedforward.DNN(nin, 10, nout))
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
 optimizer.setup(model)
-optimizer.add_hook(chainer.optimizer.GradientClipping(5))
 optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
 
-ann = supervised.RecurrentNeuralNetwork(optimizer)
+ann = supervised.SupervisedLearner(optimizer)
 
 # Finally we run the optimization
 # Note: to use a model after optimization, the predict method should be used; train and test
 # methods are for internal use only.
-ann.optimize(X, T)
+ann.optimize(X, T, epochs=20, batch_size=200)
 
 # plot loss and throughput
 plt.figure()
@@ -45,7 +44,4 @@ plt.show()
 Y, H = ann.predict(X['validation'])
 
 # perform an analysis on the optimal model
-data = [X['validation']]
-[data.append(H[i]) for i in range(len(H))]
-data.append(Y)
-connectivity.functional_connectivity(data)
+basic.scatterplot(T['validation'], Y)

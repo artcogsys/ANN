@@ -21,6 +21,8 @@ class MLP(Chain):
             l2=L.Linear(nhidden, noutput)
         )
 
+        self.type = 'feedforward'
+
     def __call__(self, x):
         h1 = F.relu(self.l1(x))
         y = self.l2(h1)
@@ -60,12 +62,20 @@ class DNN(ChainList):
         self.nlayer = nlayer
         self.actfun = actfun
 
+        self.h = {}
+
+        self.type = 'feedforward'
+
         super(DNN, self).__init__(links)
 
     def __call__(self, x):
 
-        h = x
-        for i in range(self.nlayer-1):
-            h = self.actfun(self[0][i](h))
-        y = self[0][-1](h)
+        if self.nlayer == 0:
+            y = self[0][-1](x)
+        else:
+            self.h[0] = self.actfun(self[0][0](x))
+            for i in range(1,self.nlayer-1):
+                self.h[i] = self.actfun(self[0][i-1](self.h[i-1]))
+            y = self[0][-1](self.h[self.nlayer-2])
+
         return y

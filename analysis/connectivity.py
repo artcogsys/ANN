@@ -5,7 +5,6 @@ def functional_connectivity(data):
     """
     Plot functional connectivity matrix (full correlation)
 
-    :param fname: file name
     :param data: list containing T x Mi timeseries data
     """
 
