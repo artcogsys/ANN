@@ -2,8 +2,8 @@ import chainer
 import matplotlib.pyplot as plt
 
 from environment import datasets
-from models import feedforward
-from paradigms import supervised
+from models import supervised_learning_models as models
+from paradigms import supervised_learning
 from paradigms.utilities import Regressor
 from analysis import basic
 
@@ -11,14 +11,14 @@ from analysis import basic
 [X, T, nin, nout] = datasets.get_supervised_feedforward_regression_data()
 
 # define model
-model = Regressor(feedforward.DNN(nin, 10, nout))
+model = Regressor(models.DNN(nin, 10, nout))
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
 optimizer.setup(model)
 optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
 
-ann = supervised.SupervisedLearner(optimizer)
+ann = supervised_learning.SupervisedLearner(optimizer)
 
 # Finally we run the optimization
 # Note: to use a model after optimization, the predict method should be used; train and test

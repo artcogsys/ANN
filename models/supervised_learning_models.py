@@ -1,6 +1,7 @@
 from chainer import Chain, ChainList
 import chainer.functions as F
 import chainer.links as L
+import custom_links as CL
 
 #####
 ## MLP
@@ -79,3 +80,57 @@ class DNN(ChainList):
             y = self[0][-1](self.h[self.nlayer-2])
 
         return y
+
+#####
+## RNN
+
+class RNNLSTM(Chain):
+    """
+    Recurrent neural network
+    """
+
+    def __init__(self, ninput, nhidden, noutput):
+        super(RNNLSTM, self).__init__(
+            l1=L.LSTM(ninput, nhidden),
+            l2=L.Linear(nhidden, noutput)
+        )
+
+        self.h = {}
+
+        self.type = 'recurrent'
+
+    def __call__(self, x):
+        self.h[0] = self.l1(x)
+        y  = self.l2(self.h[0])
+        return y
+
+    def reset_state(self):
+        self.l1.reset_state()
+
+
+###
+# Elman network
+
+class RNNElman(Chain):
+    """
+    Recurrent neural network
+    """
+
+    def __init__(self, ninput, nhidden, noutput):
+        super(RNNElman, self).__init__(
+            l1=CL.Elman(ninput, nhidden),
+            l2=L.Linear(nhidden, noutput)
+        )
+
+        self.h = {}
+
+        self.type = 'recurrent'
+
+    def __call__(self, x):
+        self.h[0] = self.l1(x)
+        y  = self.l2(self.h[0])
+        return y
+
+    def reset_state(self):
+        self.l1.reset_state()
+

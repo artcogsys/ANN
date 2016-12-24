@@ -2,8 +2,8 @@ import chainer
 import matplotlib.pyplot as plt
 
 from environment import datasets
-from models import recurrent
-from paradigms import supervised
+from models import supervised_learning_models as models
+from paradigms import supervised_learning
 from analysis import basic
 from paradigms.utilities import Regressor
 
@@ -11,7 +11,7 @@ from paradigms.utilities import Regressor
 [X, T, nin, nout] = datasets.get_supervised_recurrent_regression_data()
 
 # define model
-model = Regressor(recurrent.RNN(nin, 10, nout))
+model = Regressor(models.RNNElman(nin, 10, nout))
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
@@ -19,7 +19,7 @@ optimizer.setup(model)
 optimizer.add_hook(chainer.optimizer.GradientClipping(5))
 optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
 
-ann = supervised.SupervisedLearner(optimizer)
+ann = supervised_learning.SupervisedLearner(optimizer)
 
 # Finally we run the optimization
 # Note: to use a model after optimization, the predict method should be used; train and test
