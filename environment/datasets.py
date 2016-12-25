@@ -3,10 +3,40 @@ import random
 import chainer.datasets as datasets
 
 # A dataset can get the functionality that it generates next batches. If the batch is of size one
-# then it is online learning
+# then it is online learning; so datasets are iterables
 
 # think of how to handle feedforward vs recurrent; is permutation necessary? Not if we make this
 # part of data generation
+
+# class Dataset(object):
+#
+#     def __init__(self, X, T, batch_size=32):
+#
+#         self.X = X
+#         self.T = T
+#
+#         self.batch_size = batch_size
+#
+#         self.steps = len(X) // batch_size
+#
+#         self.step = 0
+#
+#     def __iter__(self):
+#         return self  # simplest iterator creation
+#
+#     def next(self):
+#
+#         if self.step == self.steps:
+#             self.step = 0
+#
+#         x = Variable(self.xp.asarray([X[perm[(seq * steps + step) % len(X)]] for seq in xrange(batch_size)]))
+#         t = Variable(self.xp.asarray([T[perm[(seq * steps + step) % len(T)]] for seq in xrange(batch_size)]))
+#
+#         self.step += 1
+#
+#         return x, t
+
+
 
 def get_supervised_feedforward_classification_data():
 

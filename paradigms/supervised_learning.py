@@ -81,6 +81,9 @@ class SupervisedLearner(object):
 
     def train(self, X, T, batch_size, cutoff):
 
+        # required?
+        self.model.predictor.reset_state()
+
         cumloss = self.xp.zeros((), 'float32')
 
         loss = Variable(self.xp.zeros((), 'float32'))
@@ -96,6 +99,7 @@ class SupervisedLearner(object):
             # processing of random batches
             perm = np.random.permutation(np.arange(len(X)))
             for step in xrange(steps):
+
                 x = Variable(self.xp.asarray([X[perm[(seq * steps + step) % len(X)]] for seq in xrange(batch_size)]))
                 t = Variable(self.xp.asarray([T[perm[(seq * steps + step) % len(T)]] for seq in xrange(batch_size)]))
 
@@ -112,6 +116,7 @@ class SupervisedLearner(object):
             # processing of sequences
             for step in xrange(steps):
 
+                # uncertain about batch mode here
                 x = Variable(self.xp.asarray([X[(seq * steps + step) % len(X)] for seq in xrange(batch_size)]))
                 t = Variable(self.xp.asarray([T[(seq * steps + step) % len(T)] for seq in xrange(batch_size)]))
 
@@ -140,9 +145,10 @@ class SupervisedLearner(object):
             model = self.model
         elif self.model.predictor.type == 'recurrent':
             model = self.model.copy()
-            model.predictor.reset_state()
         else:
             raise ValueError('unknown type')
+
+        model.predictor.reset_state()
 
         # check if we are in train or test mode (e.g. for dropout)
         model.predictor.test = True
@@ -175,8 +181,7 @@ class SupervisedLearner(object):
 
     def predict(self, X):
 
-        if self.model.predictor.type == 'recurrent':
-            self.model.predictor.reset_state()
+        self.model.predictor.reset_state()
 
         # check if we are in train or test mode (e.g. for dropout)
         self.model.predictor.test = True
