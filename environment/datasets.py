@@ -8,33 +8,37 @@ import chainer.datasets as datasets
 # think of how to handle feedforward vs recurrent; is permutation necessary? Not if we make this
 # part of data generation
 
-# class Dataset(object):
-#
-#     def __init__(self, X, T, batch_size=32):
-#
-#         self.X = X
-#         self.T = T
-#
-#         self.batch_size = batch_size
-#
-#         self.steps = len(X) // batch_size
-#
-#         self.step = 0
-#
-#     def __iter__(self):
-#         return self  # simplest iterator creation
-#
-#     def next(self):
-#
-#         if self.step == self.steps:
-#             self.step = 0
-#
-#         x = Variable(self.xp.asarray([X[perm[(seq * steps + step) % len(X)]] for seq in xrange(batch_size)]))
-#         t = Variable(self.xp.asarray([T[perm[(seq * steps + step) % len(T)]] for seq in xrange(batch_size)]))
-#
-#         self.step += 1
-#
-#         return x, t
+class SupervisedData(object):
+
+    def __init__(self, X, T, batch_size=32, permute=True):
+
+        self.X = X
+        self.T = T
+
+        if permute:
+            self.perm = np.random.permutation(np.arange(len(X)))
+        else:
+            self.perm = np.arange(len(X))
+
+        self.batch_size = batch_size
+
+        self.steps = len(X) // batch_size
+
+        self.step = 0
+
+    def __iter__(self):
+        return self  # simplest iterator creation
+
+    def next(self):
+
+        x = [self.X[self.perm[(seq * self.steps + self.step) % len(self.X)]] for seq in xrange(self.batch_size)]
+        t = [self.T[self.perm[(seq * self.steps + self.step) % len(self.T)]] for seq in xrange(self.batch_size)]
+
+        self.step += 1
+        if self.step == self.steps:
+            self.step = 0
+
+        return x, t
 
 
 

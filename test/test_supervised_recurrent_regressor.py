@@ -15,6 +15,10 @@ import chainer.functions as F
 # define model
 model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman, actfun=F.relu))
 
+d = datasets.SupervisedData(X['training'],T['training'])
+
+d.next()
+
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
 optimizer.setup(model)
