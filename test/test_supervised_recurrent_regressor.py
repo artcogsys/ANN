@@ -1,17 +1,19 @@
 import chainer
 import matplotlib.pyplot as plt
 
-from environment import datasets
-from models import supervised_learning_models as models
-from paradigms import supervised_learning
 from analysis import basic
-from paradigms.utilities import Regressor
+from environment import datasets
+from models import neural_networks as models
+from models.utilities import Regressor
+from paradigms import supervised_learning
+import models.custom_links as CL
+import chainer.functions as F
 
 # get data
 [X, T, nin, nout] = datasets.get_supervised_recurrent_regression_data()
 
 # define model
-model = Regressor(models.RNNElman(nin, 10, nout))
+model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman, actfun=F.relu))
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()

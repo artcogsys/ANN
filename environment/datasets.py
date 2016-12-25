@@ -2,6 +2,12 @@ import numpy as np
 import random
 import chainer.datasets as datasets
 
+# A dataset can get the functionality that it generates next batches. If the batch is of size one
+# then it is online learning
+
+# think of how to handle feedforward vs recurrent; is permutation necessary? Not if we make this
+# part of data generation
+
 def get_supervised_feedforward_classification_data():
 
     # We define the inputs as randomly generated examples. Each input comprises

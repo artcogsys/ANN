@@ -3,7 +3,7 @@ import chainer.links as L
 import matplotlib.pyplot as plt
 
 from environment import datasets
-from models import supervised_learning_models as models
+from models import neural_networks as models
 from paradigms import supervised_learning
 from analysis import connectivity
 
@@ -11,7 +11,7 @@ from analysis import connectivity
 [X, T, nin, nout] = datasets.get_supervised_recurrent_classification_data()
 
 # define model
-model = L.Classifier(models.RNNLSTM(nin, 20, nout))
+model = L.Classifier(models.RecurrentNeuralNetwork(nin, 20, nout))
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
