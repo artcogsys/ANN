@@ -31,4 +31,4 @@ ann.report('tmp')
 ana = Analysis(ann.model, fname='tmp')
 
 # analyse data
-ana.supervised_analysis(validation_data.X, validation_data.T)
+ana.classification_analysis(validation_data.X, validation_data.T)

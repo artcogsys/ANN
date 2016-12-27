@@ -18,3 +18,9 @@ Chainer/.ipynb_checkpoints/RNNExample-checkpoint.ipynb
 .idea/workspace.xml
 
 test/example_silvan.py
+
+test/bvlc_alexnet.caffemodel
+
+*.caffemodel
+
+test/test_caffe_classifier.py

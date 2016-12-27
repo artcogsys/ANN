@@ -1,6 +1,7 @@
 from chainer import Chain, ChainList
 import chainer.links as L
 import chainer.functions as F
+import numpy as np
 
 #####
 ## Deep Neural Network
@@ -57,6 +58,48 @@ class DeepNeuralNetwork(ChainList):
 
     def reset_state(self):
         # allows generic handling of stateful and stateless networks
+        pass
+
+#####
+## Convolutional Neural Network
+
+class ConvNet(Chain):
+    """
+    Basic convolutional neural network
+    """
+
+    def __init__(self, ninput, nhidden, noutput):
+        """
+
+        :param ninput: nchannels x height x width
+        :param nhidden: number of hidden units
+        :param noutput: number of action outputs
+        """
+        super(ConvNet, self).__init__(
+            # dependence between filter size and padding; here output still 20x20 due to padding
+            l1=L.Convolution2D(ninput[0], nhidden, 3, 1, 1),
+            l2=L.Linear(np.prod(ninput) * nhidden, noutput)
+        )
+
+        self.ninput = ninput
+        self.nhidden = nhidden
+        self.noutput = noutput
+
+        self.h = {}
+
+        self.type = 'feedforward'
+
+    def __call__(self, x):
+        """
+        :param x: sensory input (ntrials x nchannels x ninput[0] x ninput[1])
+        """
+
+        self.h[0] = F.relu(self.l1(x))
+        y = self.l2(self.h[0])
+
+        return y
+
+    def reset_state(self):
         pass
 
 

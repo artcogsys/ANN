@@ -151,22 +151,24 @@ class SupervisedRecurrentRegressionData(SupervisedData):
         super(SupervisedRecurrentRegressionData, self).__init__(X, T, batch_size, shuffle=False)
 
 
+class MNISTData(SupervisedData):
 
+    def __init__(self, validation=False, convolutional=True, batch_size=1):
 
+        if validation:
+            data = datasets.get_mnist()[1]
+        else:
+            data = datasets.get_mnist()[0]
 
-def get_mnist():
+        X = data._datasets[0].astype('float32')
+        T = data._datasets[1].astype('int32')
 
-    # get train and validation data as TupleDatasets
-    train, validation = datasets.get_mnist()
+        if convolutional:
+            X = np.reshape(X,np.concatenate([[X.shape[0]], [1], [28, 28]]))
+            self.nin = [1, 28, 28]
+        else:
+            self.nin = X.shape[1]
 
-    X = {}
-    T = {}
-    X['training'] = train._datasets[0].astype('float32')
-    T['training'] = train._datasets[1].astype('int32')
-    X['validation'] = validation._datasets[0].astype('float32')
-    T['validation'] = validation._datasets[1].astype('int32')
+        self.nout = (np.max(T) + 1)
 
-    nin = X['training'].shape[1]
-    nout = (np.max(T['training']) + 1)
-
-    return [X, T, nin, nout]
+        super(MNISTData, self).__init__(X, T, batch_size, shuffle=False)
