@@ -1,7 +1,5 @@
 import chainer
-import matplotlib.pyplot as plt
-
-from analysis import basic
+from analysis import Analysis
 from environment import datasets
 from models import neural_networks as models
 from models.utilities import Regressor
@@ -10,13 +8,13 @@ import models.custom_links as CL
 import chainer.functions as F
 
 # get data
-[X, T, nin, nout] = datasets.get_supervised_recurrent_regression_data()
+training_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)
+validation_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)
 
 # define model
+nin = training_data.nin
+nout = training_data.nout
 model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman, actfun=F.relu))
-
-# d = datasets.SupervisedData(X['training'],T['training'])
-# d.next()
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
@@ -27,27 +25,15 @@ optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
 ann = supervised_learning.SupervisedLearner(optimizer)
 
 # Finally we run the optimization
-# Note: to use a model after optimization, the predict method should be used; train and test
-# methods are for internal use only.
-ann.optimize(X, T, epochs=100)
+ann.optimize(training_data, validation_data=validation_data, epochs=100)
 
 # plot loss and throughput
-plt.figure()
-plt.subplot(121)
-plt.plot(ann.log[('training', 'loss')], 'r', ann.log[('validation', 'loss')], 'g')
-plt.xlabel('epoch')
-plt.ylabel('loss')
-plt.legend({'training','validation'})
-plt.subplot(122)
-plt.plot(ann.log[('training', 'throughput')], 'r', ann.log[('validation', 'throughput')], 'g')
-plt.xlabel('epoch')
-plt.ylabel('throughput')
-plt.legend({'training','validation'})
-#plt.tight_layout()
-plt.show()
+ann.report('tmp')
 
-#  return states
-Y, H = ann.predict(X['validation'])
+# create analysis object
+ana = Analysis(ann.model, fname='tmp')
 
-# perform an analysis on the optimal model
-basic.scatterplot(T['validation'], Y)
+# handle sequential data; deal with classifier analysis separately
+
+# analyse data
+ana.supervised_analysis(validation_data.X, validation_data.T)

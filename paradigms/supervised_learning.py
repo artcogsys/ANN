@@ -3,6 +3,8 @@ import numpy as np
 import pickle
 import time
 import tqdm
+import matplotlib.pyplot as plt
+
 
 class SupervisedLearner(object):
 
@@ -20,8 +22,7 @@ class SupervisedLearner(object):
 
         self.xp = np if gpu==-1 else cuda.cupy
 
-
-    def optimize(self, X, T, epochs=50, batch_size=32, cutoff=10):
+    def optimize(self, training_data, validation_data=None, epochs=50, cutoff=10):
 
         # keep track of minimal validation loss
         min_loss = float('nan')
@@ -29,18 +30,19 @@ class SupervisedLearner(object):
         for epoch in tqdm.tqdm(xrange(self.optimizer.epoch, self.optimizer.epoch + epochs)):
 
             then = time.time()
-            loss = self.train(X['training'], T['training'], batch_size, cutoff)
+            loss = self.train(training_data, cutoff)
             now = time.time()
-            throughput = T['training'].shape[0] / (now - then)
+            throughput = training_data.nexamples / (now - then)
 
             self.log[('training', 'loss')].append(loss)
             self.log[('training', 'throughput')].append(throughput)
 
-            if 'validation' in T:
+            # testing in batch mode is much faster
+            if validation_data:
                 then = time.time()
-                loss = self.test(X['validation'], T['validation'], batch_size)
+                loss = self.test(validation_data)
                 now = time.time()
-                throughput = T['validation'].shape[0] / (now - then)
+                throughput = validation_data.nexamples / (now - then)
             else:
                 loss = float('nan')
                 throughput = float('nan')
@@ -79,9 +81,8 @@ class SupervisedLearner(object):
         serializers.save_npz('{}model{}'.format(prefix, postfix), self.model)
 
 
-    def train(self, X, T, batch_size, cutoff):
+    def train(self, data, cutoff):
 
-        # required?
         self.model.predictor.reset_state()
 
         cumloss = self.xp.zeros((), 'float32')
@@ -92,16 +93,12 @@ class SupervisedLearner(object):
         self.model.predictor.test = False
         self.model.predictor.train = True
 
-        steps = len(X) // batch_size
-
         if self.model.predictor.type == 'feedforward':
 
-            # processing of random batches
-            perm = np.random.permutation(np.arange(len(X)))
-            for step in xrange(steps):
+            for _x, _t in data:
 
-                x = Variable(self.xp.asarray([X[perm[(seq * steps + step) % len(X)]] for seq in xrange(batch_size)]))
-                t = Variable(self.xp.asarray([T[perm[(seq * steps + step) % len(T)]] for seq in xrange(batch_size)]))
+                x = Variable(self.xp.asarray(_x))
+                t = Variable(self.xp.asarray(_t))
 
                 loss = self.model(x, t)
 
@@ -113,16 +110,15 @@ class SupervisedLearner(object):
 
         elif self.model.predictor.type == 'recurrent':
 
-            # processing of sequences
-            for step in xrange(steps):
+            for _x, _t in data:
 
-                # uncertain about batch mode here
-                x = Variable(self.xp.asarray([X[(seq * steps + step) % len(X)] for seq in xrange(batch_size)]))
-                t = Variable(self.xp.asarray([T[(seq * steps + step) % len(T)] for seq in xrange(batch_size)]))
+                x = Variable(self.xp.asarray(_x))
+                t = Variable(self.xp.asarray(_t))
 
                 loss += self.model(x, t)
 
-                if (step + 1) % cutoff == 0 or (step + 1) == steps:
+                if data.step % cutoff == 0 or data.step == data.steps:
+
                     self.optimizer.zero_grads()
                     loss.backward()
                     loss.unchain_backward()
@@ -131,13 +127,14 @@ class SupervisedLearner(object):
                     cumloss += loss.data
                     loss = Variable(self.xp.zeros((), 'float32'))
 
-            return float(cumloss / steps)
+            return float(cumloss / data.steps)
 
         else:
+
             raise ValueError('unknown type')
 
 
-    def test(self, X, T, batch_size):
+    def test(self, data):
 
         loss = Variable(self.xp.zeros((), 'float32'), True)
 
@@ -154,51 +151,31 @@ class SupervisedLearner(object):
         model.predictor.test = True
         model.predictor.train = False
 
-        steps = len(X) // batch_size
+        for _x, _t in data:
 
-        if self.model.predictor.type == 'feedforward':
+            x = Variable(self.xp.asarray(_x), True)
+            t = Variable(self.xp.asarray(_t), True)
 
-            # processing of random batches
-            perm = np.random.permutation(np.arange(len(X)))
-            for step in xrange(steps):
-                x = Variable(self.xp.asarray([X[perm[(seq * steps + step) % len(X)]] for seq in xrange(batch_size)]),
-                             True)
-                t = Variable(self.xp.asarray([T[perm[(seq * steps + step) % len(T)]] for seq in xrange(batch_size)]),
-                             True)
+            loss += model(x, t)
 
-                loss += model(x, t)
+        return float(loss.data / data.steps)
 
-        elif self.model.predictor.type == 'recurrent':
 
-            # processing of sequences
-            for step in xrange(steps):
-                x = Variable(self.xp.asarray([X[(seq * steps + step) % len(X)] for seq in xrange(batch_size)]), True)
-                t = Variable(self.xp.asarray([T[(seq * steps + step) % len(T)] for seq in xrange(batch_size)]), True)
+    def report(self, fname=None):
 
-                loss += model(x, t)
+        plt.clf()
+        plt.subplot(121)
+        plt.plot(self.log[('training', 'loss')], 'r', self.log[('validation', 'loss')], 'g')
+        plt.xlabel('epoch')
+        plt.ylabel('loss')
+        plt.legend({'training', 'validation'})
+        plt.subplot(122)
+        plt.plot(self.log[('training', 'throughput')], 'r', self.log[('validation', 'throughput')], 'g')
+        plt.xlabel('epoch')
+        plt.ylabel('throughput')
+        plt.legend({'training', 'validation'})
 
-        return float(loss.data / steps)
-
-    def predict(self, X):
-
-        self.model.predictor.reset_state()
-
-        # check if we are in train or test mode (e.g. for dropout)
-        self.model.predictor.test = True
-        self.model.predictor.train = False
-
-        Y = []
-        for step in xrange(X.shape[0]):
-
-            x = Variable(self.xp.asarray(X[step][None]), True)
-            Y.append(self.model.predictor(x).data)
-
-            if step == 0:
-                H = [[self.model.predictor.h[i].data[0]] for i in xrange(len(self.model.predictor.h))]
-            else:
-                _ = [H[i].append(self.model.predictor.h[i].data[0]) for i in xrange(len(self.model.predictor.h))]
-
-        H = [self.xp.asarray(H[i]) for i in xrange(len(H))]
-        Y = np.squeeze(self.xp.asarray(Y))
-
-        return Y, H
+        if fname:
+            plt.savefig(fname)
+        else:
+            plt.show()
