@@ -16,3 +16,5 @@ Chainer/.ipynb_checkpoints/RNNExample-checkpoint.ipynb
 .ipynb_checkpoints/RNNExample-checkpoint.ipynb
 
 .idea/workspace.xml
+
+test/example_silvan.py

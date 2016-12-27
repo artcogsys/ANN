@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from chainer import Variable, cuda
+import scipy.stats as ss
 
 class Analysis(object):
 
@@ -34,33 +35,31 @@ class Analysis(object):
         H = [self.xp.asarray(H[i]) for i in xrange(len(H))]
         Y = np.squeeze(self.xp.asarray(Y))
 
-        #  create scatterplot
-        self.scatterplot(T, Y)
-
-    def scatterplot(self,T, Y, idx=0):
-        """
-        scatterplot for targets T versus predictions Y
-
-        :param T: T x M array
-        :param Y: T x M array
-        :param idx: output index
-        """
-
-        if idx==0 and T.ndim==1:
-            t = T
-        else:
-            t = T[:, idx]
-
-        y = Y[:, idx]
+        [nexamples, nregressors] = Y.shape
 
         plt.clf()
-        plt.scatter(t, y)
+        plt.subplot(121)
+        for i in range(nregressors):
+            rgb = np.tile(np.random.rand(3),[nexamples,1])
+            plt.scatter(T[:, i], Y[:, i], c=rgb)
+            plt.hold('on')
         plt.axis('equal')
         plt.grid(True)
-        plt.title('R = ' + str(np.corrcoef(t, y)[0, 1]))
+        plt.xlabel('Observed value')
+        plt.ylabel('Predicted value')
+        plt.title('Scatterplot')
+
+        plt.subplot(122)
+        R = np.zeros([nregressors,1])
+        for i in range(nregressors):
+            R[i] = ss.pearsonr(np.squeeze(T[:,i]),np.squeeze(Y[:,i]))[0]
+        plt.hist(R,50,normed=1,facecolor='black')
+        plt.grid(True)
+        plt.xlabel('Pearson correlation')
+        plt.title('Histogram of Pearson correlations')
 
         if self.fname:
-            plt.savefig(self.fname + '_scatterplot.png')
+            plt.savefig(self.fname + '_supervised_analysis.png')
         else:
             plt.show()
 
@@ -81,6 +80,7 @@ class Analysis(object):
             plt.savefig(self.fname + '_weight_matrix.png')
         else:
             plt.show()
+
 
     def functional_connectivity(self,data):
         """
