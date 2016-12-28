@@ -65,20 +65,22 @@ class SupervisedLearner(object):
         # or to last model in case no validation set is used
         self.model = optimal_model
 
-    def load(self, postfix, prefix):
-        with open('{}log{}'.format(prefix, postfix), 'rb') as f:
+    def load(self, fname):
+
+        with open('{}_log'.format(fname), 'rb') as f:
             self.log = pickle.load(f)
 
-        serializers.load_npz('{}optimizer{}'.format(prefix, postfix), self.optimizer)
-        serializers.load_npz('{}model{}'.format(prefix, postfix), self.model)
+        serializers.load_npz('{}_optimizer'.format(fname), self.optimizer)
+        serializers.load_npz('{}_model'.format(fname), self.model)
 
 
-    def save(self, postfix, prefix):
-        with open('{}log{}'.format(prefix, postfix), 'wb') as f:
+    def save(self, fname):
+
+        with open('{}_log'.format(fname), 'wb') as f:
             pickle.dump(self.log, f, -1)
 
-        serializers.save_npz('{}optimizer{}'.format(prefix, postfix), self.optimizer)
-        serializers.save_npz('{}model{}'.format(prefix, postfix), self.model)
+        serializers.save_npz('{}_optimizer'.format(fname), self.optimizer)
+        serializers.save_npz('{}_model'.format(fname), self.model)
 
 
     def train(self, data, cutoff):
@@ -165,15 +167,17 @@ class SupervisedLearner(object):
 
         plt.clf()
         plt.subplot(121)
-        plt.plot(self.log[('training', 'loss')], 'r', self.log[('validation', 'loss')], 'g')
+        plt.plot(self.log[('training', 'loss')], 'r', label='training')
+        plt.plot(self.log[('validation', 'loss')], 'g', label='validation')
         plt.xlabel('epoch')
         plt.ylabel('loss')
-        plt.legend({'training', 'validation'})
+        plt.legend()
         plt.subplot(122)
-        plt.plot(self.log[('training', 'throughput')], 'r', self.log[('validation', 'throughput')], 'g')
+        plt.plot(self.log[('training', 'throughput')], 'r', label='training')
+        plt.plot(self.log[('validation', 'throughput')], 'g', label='validation')
         plt.xlabel('epoch')
         plt.ylabel('throughput')
-        plt.legend({'training', 'validation'})
+        plt.legend()
 
         if fname:
             plt.savefig(fname)

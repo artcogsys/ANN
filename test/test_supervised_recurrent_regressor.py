@@ -27,11 +27,14 @@ ann = supervised_learning.SupervisedLearner(optimizer)
 # Finally we run the optimization
 ann.optimize(training_data, validation_data=validation_data, epochs=100)
 
+# Save model
+ann.save('models/supervised_recurrent_regressor')
+
 # plot loss and throughput
-ann.report('tmp')
+ann.report('results/tmp')
 
 # create analysis object
-ana = Analysis(ann.model, fname='tmp')
+ana = Analysis(ann.model, fname='results/tmp')
 
 # handle sequential data; deal with classifier analysis separately
 

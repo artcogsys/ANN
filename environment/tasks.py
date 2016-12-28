@@ -1,6 +1,60 @@
 import numpy as np
 import chainer.functions as F
 
+#####
+## Base classes
+
+class Task(object):
+
+    def __init__(self, X, T, batch_size=1, shuffle=False):
+        """
+
+        :param X: input data
+        :param T: target data
+        :param batch_size: number of examples per batch
+        :param permute: whether or not to shuffle examples
+
+        Note:
+        - with batch_size=1 and shuffle=False we have online learning
+        - recurrent neural networks require shuffle=False
+
+        """
+
+        self.X = X
+        self.T = T
+
+        if shuffle:
+            self.perm = np.random.permutation(np.arange(len(X)))
+        else:
+            self.perm = np.arange(len(X))
+
+        self.batch_size = batch_size
+
+        self.steps = len(X) // batch_size
+
+        self.step = 0
+
+        self.nexamples = self.X.shape[0]
+
+    def __iter__(self):
+        return self  # simplest iterator creation
+
+    def next(self):
+
+        if self.step == self.steps:
+            self.step = 0
+            raise StopIteration
+
+        x = [self.X[self.perm[(seq * self.steps + self.step) % len(self.X)]] for seq in xrange(self.batch_size)]
+        t = [self.T[self.perm[(seq * self.steps + self.step) % len(self.T)]] for seq in xrange(self.batch_size)]
+
+        self.step += 1
+
+        return x, t
+
+
+
+
 ###
 # Base class for a task
 
@@ -50,7 +104,7 @@ class Task(object):
     def loss(self, x, t):
         """
 
-        Loss function in case of SupervisedAgent
+        Loss function in case of supervised learning
 
         :param x: predicted action
         :param t: target action

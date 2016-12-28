@@ -25,10 +25,10 @@ ann = supervised_learning.SupervisedLearner(optimizer)
 ann.optimize(training_data, validation_data=validation_data, epochs=100)
 
 # plot loss and throughput
-ann.report('tmp')
+ann.report('results/tmp')
 
 # create analysis object
-ana = Analysis(ann.model, fname='tmp')
+ana = Analysis(ann.model, fname='results/tmp')
 
 # analyse data
 ana.regression_analysis(validation_data.X, validation_data.T)
