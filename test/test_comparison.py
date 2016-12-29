@@ -7,70 +7,84 @@ import models.custom_links as CL
 import chainer.functions as F
 import chainer.links as L
 import matplotlib.pyplot as plt
+import numpy as np
 
-### MODEL 1
+# number of training epochs
+nepochs = 50
 
-# get data
-training_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)
-validation_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)
+# number of repetitions of the comparison
+nreps = 5
 
-# define model 1
-nin = training_data.nin
-nout = training_data.nout
-model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman, actfun=F.relu))
+# number of models/optimizers to compare
+nmodels = 2
 
-# Set up an optimizer
-optimizer = chainer.optimizers.Adam()
-optimizer.setup(model)
-optimizer.add_hook(chainer.optimizer.GradientClipping(5))
-optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
-
-ann = supervised_learning.SupervisedLearner(optimizer)
-
-# Finally we run the optimization
-ann.optimize(training_data, validation_data=validation_data, epochs=100)
-
-### MODEL 2
+# colors associated with each models plot
+colors = ['k', 'r']
 
 # get data
 training_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)
 validation_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)
-
-# define model 2
 nin = training_data.nin
 nout = training_data.nout
-model2 = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=L.LSTM, actfun=F.identity))
-#model2 = Regressor(models.RecurrentNeuralNetwork(nin, 20, nout, link=CL.Elman, actfun=F.relu))
 
-# Set up an optimizer
-optimizer2 = chainer.optimizers.Adam()
-optimizer2.setup(model2)
-optimizer2.add_hook(chainer.optimizer.GradientClipping(5))
-optimizer2.add_hook(chainer.optimizer.WeightDecay(1e-5))
+training_loss = {}
+validation_loss = {}
+training_throughput = {}
+validation_throughput = {}
 
-ann2 = supervised_learning.SupervisedLearner(optimizer2)
+for i in range(nmodels):
 
-# Finally we run the optimization
-ann2.optimize(training_data, validation_data=validation_data, epochs=100)
+    training_loss[i] = np.zeros([nreps,nepochs])
+    validation_loss[i] = np.zeros([nreps,nepochs])
+    training_throughput[i] = np.zeros([nreps,nepochs])
+    validation_throughput[i] = np.zeros([nreps,nepochs])
+
+    for j in range(nreps):
+
+        # reset datasets
+        training_data.reset()
+        validation_data.reset()
+
+        # define model
+        if i==0:
+            model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman, actfun=F.relu))
+        else:
+            model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=L.LSTM, actfun=F.identity))
+
+        # Set up optimizer
+        optimizer = chainer.optimizers.Adam()
+        optimizer.setup(model)
+        optimizer.add_hook(chainer.optimizer.GradientClipping(5))
+        optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
+
+        ann = supervised_learning.SupervisedLearner(optimizer)
+
+        # Finally we run the optimization
+        ann.optimize(training_data, validation_data=validation_data, epochs=nepochs)
+
+        training_loss[i][j,:] = ann.log[('training', 'loss')]
+        validation_loss[i][j,:] = ann.log[('validation', 'loss')]
+        training_throughput[i][j,:] = ann.log[('training', 'throughput')]
+        validation_throughput[i][j,:] = ann.log[('validation', 'throughput')]
 
 ### compare losses
 
 plt.clf()
+
 plt.subplot(121)
 plt.hold(True)
-plt.plot(ann.log[('training', 'loss')], 'k', label='training 1')
-plt.plot(ann.log[('validation', 'loss')], 'k--', label='validation 1')
-plt.plot(ann2.log[('training', 'loss')], 'r', label='training 2')
-plt.plot(ann2.log[('validation', 'loss')], 'r--', label='validation 2')
+x = np.arange(nepochs)
+for i in range(nmodels):
+    plt.errorbar(x,np.mean(training_loss[i],axis=0), yerr=np.std(training_loss[i],axis=0)/np.sqrt(nreps), fmt='-', color=colors[i], ecolor=colors[i], label='training' + str(i))
+    plt.errorbar(x,np.mean(validation_loss[i],axis=0), yerr=np.std(validation_loss[i],axis=0)/np.sqrt(nreps), fmt='--', color=colors[i], ecolor=colors[i], label='validation' + str(i))
 plt.xlabel('epoch')
 plt.ylabel('loss')
 plt.legend()
 plt.subplot(122)
 plt.hold(True)
-plt.plot(ann.log[('training', 'throughput')], 'k', label='training 1')
-plt.plot(ann.log[('validation', 'throughput')], 'k--', label='validation 1')
-plt.plot(ann2.log[('training', 'throughput')], 'r', label='training 2')
-plt.plot(ann2.log[('validation', 'throughput')], 'r--', label='validation 2')
+for i in range(nmodels):
+    plt.errorbar(x,np.mean(training_throughput[i],axis=0), yerr=np.std(training_throughput[i],axis=0)/np.sqrt(nreps), fmt='-', color=colors[i], ecolor=colors[i], label='training' + str(i))
+    plt.errorbar(x,np.mean(validation_throughput[i],axis=0), yerr=np.std(validation_throughput[i],axis=0)/np.sqrt(nreps), fmt='--', color=colors[i], ecolor=colors[i], label='validation' + str(i))
 plt.xlabel('epoch')
 plt.ylabel('throughput')
 plt.legend()

@@ -53,6 +53,9 @@ class SupervisedData(object):
 
         return x, t
 
+    def reset(self):
+        self.step = 0
+
 class UnsupervisedData(object):
 
     def __init__(self, X, batch_size=1, shuffle=False):
@@ -87,6 +90,8 @@ class UnsupervisedData(object):
 
         return x
 
+    def reset(self):
+        self.step = 0
 
 #####
 ## Supervised datasets
