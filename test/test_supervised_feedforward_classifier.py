@@ -1,8 +1,9 @@
 import chainer
+
+import datasets
+import supervised_learning
 from analysis import Analysis
-from environment import datasets
 from models import neural_networks as models
-from paradigms import supervised_learning
 from models.utilities import Classifier
 
 # get data

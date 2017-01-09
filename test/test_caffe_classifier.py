@@ -1,15 +1,10 @@
-import chainer
-from analysis import Analysis
-from environment import datasets
-from models import neural_networks as models
-from models.utilities import Classifier
-from paradigms import supervised_learning
-from chainer.links.caffe import CaffeFunction
-from chainer import Variable
 import numpy as np
-from chainer.links import VGG16Layers
 from PIL import Image
+from chainer import Variable
+from chainer.links import VGG16Layers
+from chainer.links.caffe import CaffeFunction
 
+from analysis import Analysis
 
 model = VGG16Layers()
 

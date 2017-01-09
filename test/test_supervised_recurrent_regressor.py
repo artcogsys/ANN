@@ -1,11 +1,12 @@
 import chainer
+import chainer.functions as F
+
+import datasets
+import models.custom_links as CL
+import supervised_learning
 from analysis import Analysis
-from environment import datasets
 from models import neural_networks as models
 from models.utilities import Regressor
-from paradigms import supervised_learning
-import models.custom_links as CL
-import chainer.functions as F
 
 # get data
 training_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)

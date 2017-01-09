@@ -1,13 +1,14 @@
 import chainer
-from environment import datasets
-from models import neural_networks as models
-from models.utilities import Regressor
-from paradigms import supervised_learning
-import models.custom_links as CL
 import chainer.functions as F
 import chainer.links as L
 import matplotlib.pyplot as plt
 import numpy as np
+
+import datasets
+import models.custom_links as CL
+import supervised_learning
+from models import neural_networks as models
+from models.utilities import Regressor
 
 # number of training epochs
 nepochs = 50
