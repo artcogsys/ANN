@@ -23,6 +23,15 @@ class SupervisedLearner(object):
         self.xp = np if gpu==-1 else cuda.cupy
 
     def optimize(self, training_data, validation_data=None, epochs=50, cutoff=10):
+        """
+
+        :param training_data: Required training data set
+        :param validation_data: Optional validation data set; optimize returns best model
+                according to validation or last model it was trained on
+        :param epochs: number of training epochs
+        :param cutoff: cutoff in terms of number of time steps for truncacted backpropagation
+        :return:
+        """
 
         # keep track of minimal validation loss
         min_loss = float('nan')
