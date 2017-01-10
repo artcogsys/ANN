@@ -13,7 +13,7 @@ validation_data = datasets.SupervisedFeedforwardClassificationData(batch_size=32
 # define model
 nin = training_data.nin
 nout = training_data.nout
-model = Classifier(models.DeepNeuralNetwork(nin, 10, nout))
+model = Classifier(models.DeepNeuralNetwork(nin, 10, nout, nlayer=3))
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()

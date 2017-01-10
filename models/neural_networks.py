@@ -50,7 +50,7 @@ class DeepNeuralNetwork(ChainList):
         else:
             self.h[0] = self.actfun(self[0][0](x))
             for i in range(1,self.nlayer-1):
-                self.h[i] = self.actfun(self[0][i-1](self.h[i-1]))
+                self.h[i] = self.actfun(self[0][i](self.h[i-1]))
             y = self[0][-1](self.h[self.nlayer-2])
 
         return y
@@ -110,6 +110,14 @@ class RecurrentNeuralNetwork(ChainList):
     """
     Recurrent neural network consisting of a chain of layers (weight matrices)
     with a fixed number of nhidden units
+
+    nlayer determines number of layers. The last layer is always a linear layer. The other layers
+    make use of an activation function actfun
+
+    For LSTM we need to use actfun=F.identity since the LSTM already applied a tanh nonlinearity
+
+    For Elman layers we need to use an explicit nonlinearity
+
     """
 
     def __init__(self, ninput, nhidden, noutput, nlayer=2, link=L.LSTM, actfun=F.identity):
@@ -118,7 +126,7 @@ class RecurrentNeuralNetwork(ChainList):
         :param ninput: number of inputs
         :param nhidden: number of hidden units
         :param noutput: number of outputs
-        :param nlayer: number of weight matrices (2; standard RNN with one hidden layer)
+        :param nlayer: number of weight matrices (2 = standard RNN with one layer of hidden units)
         :param link: used recurrent link (LSTM)
         :param actfun: used activation function (identity)
 
@@ -152,7 +160,7 @@ class RecurrentNeuralNetwork(ChainList):
         else:
             self.h[0] = self.actfun(self[0][0](x))
             for i in range(1,self.nlayer-1):
-                self.h[i] = self.actfun(self[0][i-1](self.h[i-1]))
+                self.h[i] = self.actfun(self[0][i](self.h[i-1]))
             y = self[0][-1](self.h[self.nlayer-2])
 
         return y
