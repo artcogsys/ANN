@@ -30,7 +30,7 @@ class ElmanBase(link.Chain):
 
 class Elman(ElmanBase):
     """
-    Implementation of simple Elman layer
+    Implementation of simple linear Elman layer
     """
 
     def __init__(self, in_size, out_size, initU=None,
@@ -66,5 +66,6 @@ class Elman(ElmanBase):
         z = self.U(x)
         if self.h is not None:
             z += self.W(self.h)
-        self.h = relu.relu(z)
+        # self.h = relu.relu(z) # must be part of call function of RNN
+        self.h = z
         return self.h
