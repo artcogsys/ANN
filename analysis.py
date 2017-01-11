@@ -101,6 +101,10 @@ class Analysis(object):
                 count_mat[i,j] = np.sum(clf == j)
             conf_mat[i] = count_mat[i]/np.sum(count_mat[i])
 
+        # print accuracy
+        clf = np.argmax(Y, axis=1)
+        print 'accuracy: {0}'.format(np.mean(clf==T))
+
         plt.subplot(121)
         plt.imshow(count_mat)
         plt.xlabel('Predicted class')

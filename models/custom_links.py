@@ -18,19 +18,27 @@ class ElmanBase(link.Chain):
         :param initU: Input-to-hidden weight matrix initialization
         :param initW: Hidden-to-hidden weight matrix initialization
         :param bias_init: Bias initialization
+
         """
+
         if n_inputs is None:
             n_inputs = n_units
+
         super(ElmanBase, self).__init__(
             U=linear.Linear(n_inputs, n_units,
                             initialW=initU, initial_bias=bias_init),
             W=linear.Linear(n_units, n_units,
-                            initialW=initW, initial_bias=bias_init, nobias=True),
+                            initialW=initW, nobias=True),
         )
 
 class Elman(ElmanBase):
     """
     Implementation of simple linear Elman layer
+
+    Consider using initW=chainer.initializers.Identity(scale=0.01)
+    as in https://arxiv.org/pdf/1504.00941v2.pdf
+    (scale=1.0 led to divergence issues in our example)
+
     """
 
     def __init__(self, in_size, out_size, initU=None,
@@ -63,9 +71,13 @@ class Elman(ElmanBase):
         self.h = None
 
     def __call__(self, x):
+
         z = self.U(x)
         if self.h is not None:
             z += self.W(self.h)
-        # self.h = relu.relu(z) # must be part of call function of RNN
-        self.h = z
+
+        # must be part of layer since the transformed value is part of the
+        # representation of the previous hidden state
+        self.h = relu.relu(z)
+
         return self.h

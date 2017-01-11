@@ -1,5 +1,6 @@
 import chainer
 import chainer.functions as F
+import chainer.links as L
 
 import datasets
 import models.custom_links as CL
@@ -15,7 +16,8 @@ validation_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)
 # define model
 nin = training_data.nin
 nout = training_data.nout
-model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman, actfun=F.relu))
+#model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=L.LSTM))
+model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman))
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()

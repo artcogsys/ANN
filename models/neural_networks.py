@@ -120,7 +120,7 @@ class RecurrentNeuralNetwork(ChainList):
 
     """
 
-    def __init__(self, ninput, nhidden, noutput, nlayer=2, link=L.LSTM, actfun=F.identity):
+    def __init__(self, ninput, nhidden, noutput, nlayer=2, link=L.LSTM):
         """
 
         :param ninput: number of inputs
@@ -128,7 +128,6 @@ class RecurrentNeuralNetwork(ChainList):
         :param noutput: number of outputs
         :param nlayer: number of weight matrices (2 = standard RNN with one layer of hidden units)
         :param link: used recurrent link (LSTM)
-        :param actfun: used activation function (identity)
 
         """
 
@@ -145,7 +144,6 @@ class RecurrentNeuralNetwork(ChainList):
         self.nhidden = nhidden
         self.noutput = noutput
         self.nlayer = nlayer
-        self.actfun = actfun
 
         self.h = {}
 
@@ -158,9 +156,9 @@ class RecurrentNeuralNetwork(ChainList):
         if self.nlayer == 1:
             y = self[0][0](x)
         else:
-            self.h[0] = self.actfun(self[0][0](x))
+            self.h[0] = self[0][0](x)
             for i in range(1,self.nlayer-1):
-                self.h[i] = self.actfun(self[0][i](self.h[i-1]))
+                self.h[i] = self[0][i](self.h[i-1])
             y = self[0][-1](self.h[self.nlayer-2])
 
         return y

@@ -1,7 +1,10 @@
 import chainer
+import chainer.functions as F
+import chainer.links as L
 
 import datasets
 import supervised_learning
+import models.custom_links as CL
 from analysis import Analysis
 from models import neural_networks as models
 from models.utilities import Classifier
@@ -13,7 +16,8 @@ validation_data = datasets.SupervisedRecurrentClassificationData(batch_size=32)
 # define model
 nin = training_data.nin
 nout = training_data.nout
-model = Classifier(models.RecurrentNeuralNetwork(nin, 10, nout))
+#model = Classifier(models.RecurrentNeuralNetwork(nin, 10, nout, link=L.LSTM))
+model = Classifier(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman))
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
