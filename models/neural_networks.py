@@ -114,10 +114,6 @@ class RecurrentNeuralNetwork(ChainList):
     nlayer determines number of layers. The last layer is always a linear layer. The other layers
     make use of an activation function actfun
 
-    For LSTM we need to use actfun=F.identity since the LSTM already applied a tanh nonlinearity
-
-    For Elman layers we need to use an explicit nonlinearity
-
     """
 
     def __init__(self, ninput, nhidden, noutput, nlayer=2, link=L.LSTM):
