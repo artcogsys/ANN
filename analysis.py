@@ -132,7 +132,27 @@ class Analysis(object):
         else:
             plt.show()
 
-
+    def accuracy(self, supervised_data):
+        """
+        Return overall accuracy, calculated in batches (much faster).
+        
+        :param supervised_data: SupervisedData object
+        """
+        self.model.predictor.reset_state()
+        # check if we are in train or test mode (e.g. for dropout)
+        self.model.predictor.test = True
+        self.model.predictor.train = False
+        Y = []
+        T = []
+        for data in supervised_data:
+            x = Variable(self.xp.asarray(data[0]), True)
+            Y.append(np.argmax(self.model.predict(x),axis=1))
+            T.append(data[1])
+        Y = np.squeeze(np.asarray(Y))
+        T = np.squeeze(np.asarray(T))
+        acc = np.mean(Y==T)      
+        return acc
+    
     def weight_matrix(self, W):
         """
         Plot weight matrix
