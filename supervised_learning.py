@@ -204,7 +204,7 @@ class RecurrentLearner(SupervisedLearner):
                 loss.unchain_backward()
                 self.optimizer.update()
 
-                cumloss += loss.data
+                cumloss += loss.data 
                 loss = Variable(self.xp.zeros((), 'float32'))
 
         return float(cumloss / data.nbatches)
