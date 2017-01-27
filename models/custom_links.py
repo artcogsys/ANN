@@ -42,11 +42,12 @@ class Elman(ElmanBase):
     """
 
     def __init__(self, in_size, out_size, initU=None,
-                 initW=None, bias_init=0):
+                 initW=None, bias_init=0, actfun=relu.relu):
         super(Elman, self).__init__(
             out_size, in_size, initU, initW, bias_init)
         self.state_size = out_size
         self.reset_state()
+        self.actfun = actfun
 
     def to_cpu(self):
         super(Elman, self).to_cpu()
@@ -78,6 +79,6 @@ class Elman(ElmanBase):
 
         # must be part of layer since the transformed value is part of the
         # representation of the previous hidden state
-        self.h = relu.relu(z)
+        self.h = self.actfun(z)
 
         return self.h

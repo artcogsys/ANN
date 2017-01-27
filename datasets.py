@@ -5,100 +5,131 @@ import chainer.datasets as datasets
 #####
 ## Base classes
 
-class SupervisedData(object):
+class Data(object):
 
-    def __init__(self, X, T, batch_size=1, shuffle=False):
+    def __init__(self):
+
+        self.nbatches = len(self.X) // self.batch_size
+
+        self.step = 0
+
+        self.nexamples = self.X.shape[0]
+
+        # print 'Constructing labelled dataset; batch size: {0}; n batches: {1}'.format(self.batch_size, self.nbatches)
+        # print 'Input data: {0} data points x {1} inputs'.format(self.nexamples,self.X.shape[1])
+        # print 'Output data: {0} data points x {1} outputs'.format(self.nexamples, self.T.shape[1])
+
+    def __iter__(self):
+        return self  # simplest iterator creation
+
+    def next(self):
+        pass
+
+    def reset(self):
+        self.step = 0
+
+class StaticData(Data):
+    """
+    Data class for static data consisting of independent data points
+    """
+
+    def __init__(self, X, T, batch_size=32):
         """
 
-        :param X: input data
-        :param T: target data
-        :param batch_size: number of examples per batch
-        :param permute: whether or not to shuffle examples
-
-        Note:
-        - with batch_size=1 and shuffle=False we have online learning
-        - recurrent neural networks require shuffle=False
+        :param X: ndatapoints x ninputs input data
+        :param T: ndatapoints [x noutputs] target data
+        :param batch_size: number of trials per batch
 
         """
 
         self.X = X
         self.T = T
 
-        if shuffle:
-            self.perm = np.random.permutation(np.arange(len(X)))
-        else:
-            self.perm = np.arange(len(X))
-
         self.batch_size = batch_size
 
-        self.steps = len(X) // batch_size
+        self.perm = np.random.permutation(np.arange(len(self.X)))
 
-        self.step = 0
-
-        self.nexamples = self.X.shape[0]
-
-    def __iter__(self):
-        return self  # simplest iterator creation
+        super(StaticData, self).__init__()
 
     def next(self):
+        """
 
-        if self.step == self.steps:
+        :return: x: list of 1D arrays representing examples in the current minibatch
+        """
+
+        if self.step == self.nbatches:
             self.step = 0
             raise StopIteration
 
-        x = [self.X[self.perm[(seq * self.steps + self.step) % len(self.X)]] for seq in xrange(self.batch_size)]
-        t = [self.T[self.perm[(seq * self.steps + self.step) % len(self.T)]] for seq in xrange(self.batch_size)]
+        x = [self.X[self.perm[(seq * self.nbatches + self.step) % len(self.X)]] for seq in xrange(self.batch_size)]
+        t = [self.T[self.perm[(seq * self.nbatches + self.step) % len(self.T)]] for seq in xrange(self.batch_size)]
 
         self.step += 1
 
         return x, t
 
-    def reset(self):
-        self.step = 0
+class DynamicData(Data):
+    """
+       Data class for dynamic data consisting of temporally ordered data points
+    """
 
-class UnsupervisedData(object):
+    def __init__(self, X, T, batch_size=32):
+        """
 
-    def __init__(self, X, batch_size=1, shuffle=False):
+        :param X: ntimepoints x ninputs or ntrials x ntimepoints x ninputs input data
+        :param T: ntimepoints [x noutputs] or ntrials x ntimepoints [x noutputs] target data
+        :param batch_size: number of trials per batch
 
-        self.X = X
+        NOTE:
+        3D data is converted to 2D data. In this case, each of the trials will be processed in batch mode
+        The batch size then becomes equal to ntrials since in each batch, all trials are processed at a certain time point
 
-        if shuffle:
-            self.perm = np.random.permutation(np.arange(len(X)))
+        """
+
+        if np.ndim(X)==3:
+            # convert to 2D
+
+            ntrials, ntimepoints, nvariables = X.shape
+
+            self.X = X.reshape([ntrials * ntimepoints, nvariables])
+            self.T = T.reshape([ntrials * ntimepoints, T.shape[2]])
+
+            # number of batches must be equal to number of trials
+            self.batch_size = ntrials
+
         else:
-            self.perm = np.arange(len(X))
 
-        self.batch_size = batch_size
+            self.X = X
+            self.T = T
 
-        self.steps = len(X) // batch_size
+            self.batch_size = batch_size
 
-        self.step = 0
-
-        self.nexamples = self.X.shape[0]
-
-    def __iter__(self):
-        return self  # simplest iterator creation
+        super(DynamicData, self).__init__()
 
     def next(self):
+        """
 
-        if self.step == self.steps:
+        :return: x: list of 1D arrays representing examples in the current minibatch
+        """
+
+        if self.step == self.nbatches:
             self.step = 0
             raise StopIteration
 
-        x = [self.X[self.perm[(seq * self.steps + self.step) % len(self.X)]] for seq in xrange(self.batch_size)]
+        x = [self.X[(seq * self.nbatches + self.step) % len(self.X)] for seq in xrange(self.batch_size)]
+        t = [self.T[(seq * self.nbatches + self.step) % len(self.T)] for seq in xrange(self.batch_size)]
 
         self.step += 1
 
-        return x
+        return x, t
 
-    def reset(self):
-        self.step = 0
 
 #####
 ## Supervised datasets
 
-class SupervisedFeedforwardClassificationData(SupervisedData):
+class FeedforwardClassificationData(StaticData):
 
-    def __init__(self, batch_size=1):
+    def __init__(self, batch_size=32):
 
         X = [[random.random(), random.random()] for _ in xrange(1000)]
         T = [0 if sum(i) < 1.0 else 1 for i in X]
@@ -108,12 +139,12 @@ class SupervisedFeedforwardClassificationData(SupervisedData):
         self.nin = X.shape[1]
         self.nout = np.max(T) + 1
 
-        super(SupervisedFeedforwardClassificationData, self).__init__(X, T, batch_size, shuffle=False)
+        super(FeedforwardClassificationData, self).__init__(X, T, batch_size)
 
 
-class SupervisedFeedforwardRegressionData(SupervisedData):
+class FeedforwardRegressionData(StaticData):
 
-    def __init__(self, batch_size=1):
+    def __init__(self, batch_size=32):
 
         X = [[random.random(), random.random()] for _ in xrange(1000)]
         T = [[np.sum(i), np.prod(i)] for i in X]
@@ -123,12 +154,12 @@ class SupervisedFeedforwardRegressionData(SupervisedData):
         self.nin = X.shape[1]
         self.nout = T.shape[1]
 
-        super(SupervisedFeedforwardRegressionData, self).__init__(X, T, batch_size, shuffle=False)
+        super(FeedforwardRegressionData, self).__init__(X, T, batch_size)
 
 
-class SupervisedRecurrentClassificationData(SupervisedData):
+class RecurrentClassificationData(DynamicData):
 
-    def __init__(self, batch_size=1):
+    def __init__(self, batch_size=32):
 
         X = [[random.random(), random.random()] for _ in xrange(1000)]
         T = [0] + [0 if sum(i) < 1.0 else 1 for i in X][:-1]
@@ -138,12 +169,12 @@ class SupervisedRecurrentClassificationData(SupervisedData):
         self.nin = X.shape[1]
         self.nout = np.max(T) + 1
 
-        super(SupervisedRecurrentClassificationData, self).__init__(X, T, batch_size, shuffle=False)
+        super(RecurrentClassificationData, self).__init__(X, T, batch_size)
 
 
-class SupervisedRecurrentRegressionData(SupervisedData):
+class RecurrentRegressionData(DynamicData):
 
-    def __init__(self, batch_size=1):
+    def __init__(self, batch_size=32):
 
         X = [[random.random(), random.random()] for _ in xrange(1000)]
         T = [[1, 0]] + [[np.sum(i), np.prod(i)] for i in X][:-1]
@@ -153,12 +184,12 @@ class SupervisedRecurrentRegressionData(SupervisedData):
         self.nin = X.shape[1]
         self.nout = T.shape[1]
 
-        super(SupervisedRecurrentRegressionData, self).__init__(X, T, batch_size, shuffle=False)
+        super(RecurrentRegressionData, self).__init__(X, T, batch_size)
 
 
-class MNISTData(SupervisedData):
+class MNISTData(StaticData):
 
-    def __init__(self, validation=False, convolutional=True, batch_size=1):
+    def __init__(self, validation=False, convolutional=True, batch_size=32):
 
         if validation:
             data = datasets.get_mnist()[1]
@@ -176,4 +207,4 @@ class MNISTData(SupervisedData):
 
         self.nout = (np.max(T) + 1)
 
-        super(MNISTData, self).__init__(X, T, batch_size, shuffle=False)
+        super(MNISTData, self).__init__(X, T, batch_size)

@@ -23,8 +23,8 @@ nmodels = 2
 colors = ['k', 'r']
 
 # get data
-training_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)
-validation_data = datasets.SupervisedRecurrentRegressionData(batch_size=32)
+training_data = datasets.RecurrentRegressionData(batch_size=32)
+validation_data = datasets.RecurrentRegressionData(batch_size=32)
 nin = training_data.nin
 nout = training_data.nout
 
@@ -48,9 +48,9 @@ for i in range(nmodels):
 
         # define model
         if i==0:
-            model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman, actfun=F.relu))
+            model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=CL.Elman))
         else:
-            model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=L.LSTM, actfun=F.identity))
+            model = Regressor(models.RecurrentNeuralNetwork(nin, 10, nout, link=L.LSTM))
 
         # Set up optimizer
         optimizer = chainer.optimizers.Adam()
@@ -58,7 +58,7 @@ for i in range(nmodels):
         optimizer.add_hook(chainer.optimizer.GradientClipping(5))
         optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
 
-        ann = supervised_learning.SupervisedLearner(optimizer)
+        ann = supervised_learning.RecurrentLearner(optimizer, cutoff=10)
 
         # Finally we run the optimization
         ann.optimize(training_data, validation_data=validation_data, epochs=nepochs)

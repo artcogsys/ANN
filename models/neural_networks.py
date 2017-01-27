@@ -39,8 +39,6 @@ class DeepNeuralNetwork(ChainList):
 
         self.h = {}
 
-        self.type = 'feedforward'
-
         super(DeepNeuralNetwork, self).__init__(links)
 
     def __call__(self, x):
@@ -86,8 +84,6 @@ class ConvNet(Chain):
         self.noutput = noutput
 
         self.h = {}
-
-        self.type = 'feedforward'
 
     def __call__(self, x):
         """
@@ -142,8 +138,6 @@ class RecurrentNeuralNetwork(ChainList):
         self.nlayer = nlayer
 
         self.h = {}
-
-        self.type = 'recurrent'
 
         super(RecurrentNeuralNetwork, self).__init__(links)
 

@@ -21,7 +21,7 @@ optimizer.setup(model)
 optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
 
 # instantiate learning algorithm
-ann = supervised_learning.SupervisedLearner(optimizer)
+ann = supervised_learning.FeedforwardLearner(optimizer)
 
 # run the optimization
 ann.optimize(training_data, validation_data=validation_data, epochs=100)

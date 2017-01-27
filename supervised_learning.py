@@ -22,7 +22,7 @@ class SupervisedLearner(object):
 
         self.xp = np if gpu==-1 else cuda.cupy
 
-    def optimize(self, training_data, validation_data=None, epochs=50, cutoff=10):
+    def optimize(self, training_data, validation_data=None, epochs=50):
         """
 
         :param training_data: Required training data set
@@ -39,7 +39,7 @@ class SupervisedLearner(object):
         for epoch in tqdm.tqdm(xrange(self.optimizer.epoch, self.optimizer.epoch + epochs)):
 
             then = time.time()
-            loss = self.train(training_data, cutoff)
+            loss = self.train(training_data)
             now = time.time()
             throughput = training_data.nexamples / (now - then)
 
@@ -92,86 +92,6 @@ class SupervisedLearner(object):
         serializers.save_npz('{}_model'.format(fname), self.model)
 
 
-    def train(self, data, cutoff):
-
-        self.model.predictor.reset_state()
-
-        cumloss = self.xp.zeros((), 'float32')
-
-        loss = Variable(self.xp.zeros((), 'float32'))
-
-        # check if we are in train or test mode (e.g. for dropout)
-        self.model.predictor.test = False
-        self.model.predictor.train = True
-
-        if self.model.predictor.type == 'feedforward':
-
-            for _x, _t in data:
-
-                x = Variable(self.xp.asarray(_x))
-                t = Variable(self.xp.asarray(_t))
-
-                loss = self.model(x, t)
-
-                self.optimizer.zero_grads()
-                loss.backward()
-                self.optimizer.update()
-
-            return float(loss.data)
-
-        elif self.model.predictor.type == 'recurrent':
-
-            for _x, _t in data:
-
-                x = Variable(self.xp.asarray(_x))
-                t = Variable(self.xp.asarray(_t))
-
-                loss += self.model(x, t)
-
-                if data.step % cutoff == 0 or data.step == data.steps:
-
-                    self.optimizer.zero_grads()
-                    loss.backward()
-                    loss.unchain_backward()
-                    self.optimizer.update()
-
-                    cumloss += loss.data
-                    loss = Variable(self.xp.zeros((), 'float32'))
-
-            return float(cumloss / data.steps)
-
-        else:
-
-            raise ValueError('unknown type')
-
-
-    def test(self, data):
-
-        loss = Variable(self.xp.zeros((), 'float32'), True)
-
-        if self.model.predictor.type == 'feedforward':
-            model = self.model
-        elif self.model.predictor.type == 'recurrent':
-            model = self.model.copy()
-        else:
-            raise ValueError('unknown type')
-
-        model.predictor.reset_state()
-
-        # check if we are in train or test mode (e.g. for dropout)
-        model.predictor.test = True
-        model.predictor.train = False
-
-        for _x, _t in data:
-
-            x = Variable(self.xp.asarray(_x), True)
-            t = Variable(self.xp.asarray(_t), True)
-
-            loss += model(x, t)
-
-        return float(loss.data / data.steps)
-
-
     def report(self, fname=None):
 
         plt.clf()
@@ -192,3 +112,120 @@ class SupervisedLearner(object):
             plt.savefig(fname)
         else:
             plt.show()
+
+
+class FeedforwardLearner(SupervisedLearner):
+
+    def train(self, data):
+
+        self.model.predictor.reset_state()
+
+        cumloss = self.xp.zeros((), 'float32')
+
+        loss = Variable(self.xp.zeros((), 'float32'))
+
+        # check if we are in train or test mode (e.g. for dropout)
+        self.model.predictor.test = False
+        self.model.predictor.train = True
+
+        for _x, _t in data:
+
+            x = Variable(self.xp.asarray(_x))
+            t = Variable(self.xp.asarray(_t))
+
+            loss = self.model(x, t)
+
+            self.optimizer.zero_grads()
+            loss.backward()
+            self.optimizer.update()
+
+        return float(loss.data)
+
+
+    def test(self, data):
+
+        loss = Variable(self.xp.zeros((), 'float32'), True)
+
+        model = self.model
+
+        model.predictor.reset_state()
+
+        # check if we are in train or test mode (e.g. for dropout)
+        model.predictor.test = True
+        model.predictor.train = False
+
+        for _x, _t in data:
+            x = Variable(self.xp.asarray(_x), True)
+            t = Variable(self.xp.asarray(_t), True)
+
+            loss += model(x, t)
+
+        return float(loss.data / data.nbatches)
+
+
+class RecurrentLearner(SupervisedLearner):
+
+    def __init__(self, optimizer, gpu=-1, cutoff=None):
+        """
+
+        :param optimizer: Optimizer to run
+        :param gpu: Run on GPU or not (-1)
+        :param cutoff: cutoff length for truncated backpropagation (None=no cutoff)
+        """
+
+        super(RecurrentLearner, self).__init__(optimizer, gpu)
+
+        self.cutoff = cutoff
+
+
+    def train(self, data):
+
+        self.model.predictor.reset_state()
+
+        cumloss = self.xp.zeros((), 'float32')
+
+        loss = Variable(self.xp.zeros((), 'float32'))
+
+        # check if we are in train or test mode (used e.g. for dropout)
+        self.model.predictor.test = False
+        self.model.predictor.train = True
+
+        for _x, _t in data:
+
+            x = Variable(self.xp.asarray(_x))
+            t = Variable(self.xp.asarray(_t))
+
+            loss += self.model(x, t)
+
+            if ((not self.cutoff is None) and data.step % self.cutoff == 0) or data.step == data.nbatches:
+
+                self.optimizer.zero_grads()
+                loss.backward()
+                loss.unchain_backward()
+                self.optimizer.update()
+
+                cumloss += loss.data
+                loss = Variable(self.xp.zeros((), 'float32'))
+
+        return float(cumloss / data.nbatches)
+
+
+    def test(self, data):
+
+        loss = Variable(self.xp.zeros((), 'float32'), True)
+
+        model = self.model.copy()
+
+        model.predictor.reset_state()
+
+        # check if we are in train or test mode (e.g. for dropout)
+        model.predictor.test = True
+        model.predictor.train = False
+
+        for _x, _t in data:
+            x = Variable(self.xp.asarray(_x), True)
+            t = Variable(self.xp.asarray(_t), True)
+
+            loss += model(x, t)
+
+        return float(loss.data / data.nbatches)
