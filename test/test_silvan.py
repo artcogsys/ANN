@@ -31,7 +31,7 @@ training_data = datasets.DynamicData(img_train, neu_train)
 validation_data = datasets.DynamicData(img_val, neu_val)
 
 # define model
-model = Regressor(models.RecurrentNeuralNetwork(nin, 20, nout, link=CL.Elman))
+model = Regressor(models.RecurrentNeuralNetwork(nin, 50, nout, link=CL.Elman))
 
 # overload activation function of Elman layer
 model.predictor[0][0].actfun = sigmoid.sigmoid
@@ -42,7 +42,7 @@ optimizer.setup(model)
 optimizer.add_hook(chainer.optimizer.GradientClipping(5))
 optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
 
-ann = supervised_learning.RecurrentLearner(optimizer, cutoff=10)
+ann = supervised_learning.RecurrentLearner(optimizer, cutoff=None)
 
 # Finally we run the optimization
 ann.optimize(training_data, validation_data=validation_data, epochs=100)

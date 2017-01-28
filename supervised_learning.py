@@ -201,6 +201,7 @@ class RecurrentLearner(SupervisedLearner):
 
             loss += self.model(x, t)
 
+            # backpropagate if we reach the cutoff for truncated backprop or if we processed the last batch
             if data.step % cutoff == 0 or data.step == data.nbatches:
 
                 self.optimizer.zero_grads()

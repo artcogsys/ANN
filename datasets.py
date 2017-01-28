@@ -220,7 +220,7 @@ class DynamicDataRegressionBatch(DynamicData):
 
 class MNISTData(StaticData):
     """
-    Handwritten character dataset
+    Handwritten character dataset; example of handling convolutional input
     """
 
 
