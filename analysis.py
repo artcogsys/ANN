@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from chainer import Variable, cuda
 import scipy.stats as ss
 
@@ -39,9 +40,9 @@ class Analysis(object):
         plt.clf()
 
         plt.subplot(121)
+        colors = cm.rainbow(np.linspace(0, 1, nregressors))
         for i in range(nregressors):
-            rgb = np.tile(np.random.rand(3),[nexamples,1])
-            plt.scatter(T[:, i], Y[:, i], c=rgb)
+            plt.scatter(T[:, i], Y[:, i], c=colors[i,:])
             plt.hold('on')
         plt.axis('equal')
         plt.grid(True)
@@ -57,6 +58,8 @@ class Analysis(object):
         plt.grid(True)
         plt.xlabel('Pearson correlation')
         plt.title('Histogram of Pearson correlations')
+
+        print 'Correlation between predicted and observed outputs: {0}'.format(np.mean(R))
 
         if self.fname:
             plt.savefig(self.fname + '_regression_analysis.png')
@@ -89,7 +92,6 @@ class Analysis(object):
 
         plt.clf()
 
-#        agreement = np.argmax(Y,axis=1) == T
         # compute count matrix
         count_mat = np.zeros([nregressors, nregressors])
         conf_mat = np.zeros([nregressors, nregressors])
@@ -103,7 +105,7 @@ class Analysis(object):
 
         # print accuracy
         clf = np.argmax(Y, axis=1)
-        print 'accuracy: {0}'.format(np.mean(clf==T))
+        print 'Classification accuracy: {0}'.format(np.mean(clf==T))
 
         plt.subplot(121)
         plt.imshow(count_mat)

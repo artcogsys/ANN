@@ -23,8 +23,8 @@ nmodels = 2
 colors = ['k', 'r']
 
 # get data
-training_data = datasets.RecurrentRegressionData(batch_size=32)
-validation_data = datasets.RecurrentRegressionData(batch_size=32)
+training_data = datasets.DynamicDataRegression(batch_size=32)
+validation_data = datasets.DynamicDataRegression(batch_size=32)
 nin = training_data.nin
 nout = training_data.nout
 

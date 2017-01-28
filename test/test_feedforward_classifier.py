@@ -7,8 +7,8 @@ from models import neural_networks as models
 from models.utilities import Classifier
 
 # get data
-training_data = datasets.FeedforwardClassificationData(batch_size=32)
-validation_data = datasets.FeedforwardClassificationData(batch_size=32)
+training_data = datasets.StaticDataClassification(batch_size=32)
+validation_data = datasets.StaticDataClassification(batch_size=32)
 
 # define model
 nin = training_data.nin

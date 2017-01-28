@@ -10,8 +10,10 @@ from models import neural_networks as models
 from models.utilities import Regressor
 
 # get data
-training_data = datasets.RecurrentRegressionData(batch_size=32)
-validation_data = datasets.RecurrentRegressionData(batch_size=32)
+#training_data = datasets.DynamicDataRegressionBatch()
+#validation_data = datasets.DynamicDataRegressionBatch()
+training_data = datasets.DynamicDataRegression(batch_size=32)
+validation_data = datasets.DynamicDataRegression(batch_size=32)
 
 # define model
 nin = training_data.nin
@@ -25,7 +27,7 @@ optimizer.setup(model)
 optimizer.add_hook(chainer.optimizer.GradientClipping(5))
 optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
 
-ann = supervised_learning.RecurrentLearner(optimizer, cutoff=10)
+ann = supervised_learning.RecurrentLearner(optimizer, cutoff=None)
 
 # Finally we run the optimization
 ann.optimize(training_data, validation_data=validation_data, epochs=100)

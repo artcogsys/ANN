@@ -27,8 +27,8 @@ img_val = _in[800:]
 neu_val = _out[800:]
 
 # get data
-training_data = datasets.DynamicData(img_train, neu_train, batch_size=50)
-validation_data = datasets.DynamicData(img_val, neu_val, batch_size=50)
+training_data = datasets.DynamicData(img_train, neu_train)
+validation_data = datasets.DynamicData(img_val, neu_val)
 
 # define model
 model = Regressor(models.RecurrentNeuralNetwork(nin, 20, nout, link=CL.Elman))

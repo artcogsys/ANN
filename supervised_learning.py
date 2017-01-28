@@ -29,7 +29,6 @@ class SupervisedLearner(object):
         :param validation_data: Optional validation data set; optimize returns best model
                 according to validation or last model it was trained on
         :param epochs: number of training epochs
-        :param cutoff: cutoff in terms of number of time steps for truncacted backpropagation
         :return:
         """
 
@@ -180,6 +179,11 @@ class RecurrentLearner(SupervisedLearner):
 
     def train(self, data):
 
+        if not self.cutoff:
+            cutoff = data.nbatches
+        else:
+            cutoff = self.cutoff
+
         self.model.predictor.reset_state()
 
         cumloss = self.xp.zeros((), 'float32')
@@ -197,14 +201,14 @@ class RecurrentLearner(SupervisedLearner):
 
             loss += self.model(x, t)
 
-            if ((not self.cutoff is None) and data.step % self.cutoff == 0) or data.step == data.nbatches:
+            if data.step % cutoff == 0 or data.step == data.nbatches:
 
                 self.optimizer.zero_grads()
                 loss.backward()
                 loss.unchain_backward()
                 self.optimizer.update()
 
-                cumloss += loss.data 
+                cumloss += loss.data
                 loss = Variable(self.xp.zeros((), 'float32'))
 
         return float(cumloss / data.nbatches)

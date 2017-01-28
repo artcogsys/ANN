@@ -127,7 +127,10 @@ class DynamicData(Data):
 #####
 ## Supervised datasets
 
-class FeedforwardClassificationData(StaticData):
+class StaticDataClassification(StaticData):
+    """
+    Toy dataset for static classification data
+    """
 
     def __init__(self, batch_size=32):
 
@@ -139,10 +142,13 @@ class FeedforwardClassificationData(StaticData):
         self.nin = X.shape[1]
         self.nout = np.max(T) + 1
 
-        super(FeedforwardClassificationData, self).__init__(X, T, batch_size)
+        super(StaticDataClassification, self).__init__(X, T, batch_size)
 
 
-class FeedforwardRegressionData(StaticData):
+class StaticDataRegression(StaticData):
+    """
+    Toy dataset for static regression data
+    """
 
     def __init__(self, batch_size=32):
 
@@ -154,10 +160,13 @@ class FeedforwardRegressionData(StaticData):
         self.nin = X.shape[1]
         self.nout = T.shape[1]
 
-        super(FeedforwardRegressionData, self).__init__(X, T, batch_size)
+        super(StaticDataRegression, self).__init__(X, T, batch_size)
 
 
-class RecurrentClassificationData(DynamicData):
+class DynamicDataClassification(DynamicData):
+    """
+    Toy dataset for dynamic classification data in continuous mode
+    """
 
     def __init__(self, batch_size=32):
 
@@ -169,10 +178,13 @@ class RecurrentClassificationData(DynamicData):
         self.nin = X.shape[1]
         self.nout = np.max(T) + 1
 
-        super(RecurrentClassificationData, self).__init__(X, T, batch_size)
+        super(DynamicDataClassification, self).__init__(X, T, batch_size)
 
 
-class RecurrentRegressionData(DynamicData):
+class DynamicDataRegression(DynamicData):
+    """
+    Toy dataset for dynamic regression data in continuous mode
+    """
 
     def __init__(self, batch_size=32):
 
@@ -184,10 +196,33 @@ class RecurrentRegressionData(DynamicData):
         self.nin = X.shape[1]
         self.nout = T.shape[1]
 
-        super(RecurrentRegressionData, self).__init__(X, T, batch_size)
+        super(DynamicDataRegression, self).__init__(X, T, batch_size)
 
+class DynamicDataRegressionBatch(DynamicData):
+    """
+    Toy dataset for dynamic regression data in batch mode
+    """
+
+    def __init__(self):
+
+        X = [[random.random(), random.random()] for _ in xrange(992)]
+        T = [[1, 0]] + [[np.sum(i), np.prod(i)] for i in X][:-1]
+        X = np.array(X, 'float32')
+        T = np.array(T, 'float32')
+
+        self.nin = X.shape[1]
+        self.nout = T.shape[1]
+
+        X = np.reshape(X,[32,31,2])
+        T = np.reshape(T,[32,31,2])
+
+        super(DynamicDataRegressionBatch, self).__init__(X, T)
 
 class MNISTData(StaticData):
+    """
+    Handwritten character dataset
+    """
+
 
     def __init__(self, validation=False, convolutional=True, batch_size=32):
 
