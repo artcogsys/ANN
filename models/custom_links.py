@@ -3,9 +3,27 @@ import chainer
 from chainer.functions.activation import relu
 from chainer import link
 from chainer.links.connection import linear
+import chainer.functions as F
+from chainer import Variable
+from chainer import flag
 
 ###
-# Implementation of custom layers
+# Implementation of custom links and layers
+
+class Offset(link.Link):
+    """
+    Implementation of offset term to initialize Elman hidden states at t=0
+    """
+
+    def __init__(self, n_params):
+
+        super(Offset, self).__init__()
+
+        self.add_param('X', (1, n_params), initializer=chainer.initializers.Constant(0, dtype='float32'))
+
+    def __call__(self, z):
+        return F.broadcast_to(self.X, z.shape)
+
 
 class ElmanBase(link.Chain):
 
@@ -24,11 +42,13 @@ class ElmanBase(link.Chain):
         if n_inputs is None:
             n_inputs = n_units
 
+        # H0 takes care of the initial hidden-to-hidden input for t=0
         super(ElmanBase, self).__init__(
             U=linear.Linear(n_inputs, n_units,
                             initialW=initU, initial_bias=bias_init),
             W=linear.Linear(n_units, n_units,
                             initialW=initW, nobias=True),
+            H0=Offset(n_units),
         )
 
 class Elman(ElmanBase):
@@ -43,8 +63,10 @@ class Elman(ElmanBase):
 
     def __init__(self, in_size, out_size, initU=None,
                  initW=None, bias_init=0, actfun=relu.relu):
+
         super(Elman, self).__init__(
             out_size, in_size, initU, initW, bias_init)
+
         self.state_size = out_size
         self.reset_state()
         self.actfun = actfun
@@ -76,6 +98,8 @@ class Elman(ElmanBase):
         z = self.U(x)
         if self.h is not None:
             z += self.W(self.h)
+        else:
+            z += self.H0(z)
 
         # must be part of layer since the transformed value is part of the
         # representation of the previous hidden state

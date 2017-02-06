@@ -125,7 +125,7 @@ class DynamicData(Data):
 
 
 #####
-## Supervised datasets
+## Toy datasets
 
 class StaticDataClassification(StaticData):
     """
