@@ -30,7 +30,7 @@ optimizer.add_hook(chainer.optimizer.WeightDecay(1e-5))
 ann = supervised_learning.RecurrentLearner(optimizer, cutoff=None)
 
 # Finally we run the optimization
-ann.optimize(training_data, validation_data=validation_data, epochs=300)
+ann.optimize(training_data, validation_data=validation_data, epochs=50)
 
 # Save model
 ann.save('models/supervised_recurrent_regressor')
